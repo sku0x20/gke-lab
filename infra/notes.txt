@@ -1,0 +1,7 @@
+
+
+https://docs.aws.amazon.com/eks/latest/userguide/automode-get-started-cli.html
+
+https://docs.aws.amazon.com/eks/latest/userguide/access-entries.html
+
+https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster
