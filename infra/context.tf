@@ -19,7 +19,7 @@ data "aws_iam_session_context" "current" {
 }
 
 locals {
-  iamRole = data.aws_iam_session_context.current.issuer_arn
+  current_iamRole = data.aws_iam_session_context.current.issuer_arn
 }
 
 /*
