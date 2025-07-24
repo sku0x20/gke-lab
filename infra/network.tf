@@ -40,3 +40,40 @@ resource "aws_subnet" "c-1" {
     Name = "${var.name}-${var.region}c"
   }
 }
+
+
+resource "aws_internet_gateway" "ig" {
+  vpc_id = aws_vpc.vpc.id
+
+  tags = {
+    Name = "${var.name}-ig"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.ig.id
+  }
+
+  tags = {
+    Name = "${var.name}-public"
+  }
+}
+
+resource "aws_route_table_association" "a_public" {
+  subnet_id      = aws_subnet.a-1.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "b_public" {
+  subnet_id      = aws_subnet.b-1.id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_route_table_association" "c_public" {
+  subnet_id      = aws_subnet.c-1.id
+  route_table_id = aws_route_table.public.id
+}
