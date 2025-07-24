@@ -52,7 +52,7 @@ resource "aws_eks_cluster" "cluster" {
 
 }
 
-resource "aws_eks_access_policy_association" "creator" {
+resource "aws_eks_access_policy_association" "admin" {
   cluster_name  = aws_eks_cluster.cluster.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
   principal_arn = local.iamRole
