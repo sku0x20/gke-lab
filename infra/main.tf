@@ -1,10 +1,3 @@
-data "aws_subnets" "subnets" {
-  filter {
-    name = "vpc-id"
-    values = [aws_vpc.vpc.id]
-  }
-}
-
 resource "aws_eks_cluster" "cluster" {
   name = "${var.name}-cluster"
 
@@ -36,7 +29,11 @@ resource "aws_eks_cluster" "cluster" {
   }
 
   vpc_config {
-    subnet_ids = data.aws_subnets.subnets.ids
+    subnet_ids = [
+      aws_subnet.a-1.id,
+      aws_subnet.b-1.id,
+      aws_subnet.c-1.id,
+    ]
   }
 
   # Ensure that IAM Role permissions are created before and deleted
