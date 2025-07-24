@@ -18,7 +18,9 @@ resource "aws_eks_cluster" "cluster" {
   bootstrap_self_managed_addons = false
 
   compute_config {
-    enabled = true
+    enabled       = true
+    node_pools = ["general-purpose"]
+    node_role_arn = aws_iam_role.node.arn
   }
 
   kubernetes_network_config {
@@ -51,7 +53,7 @@ resource "aws_eks_cluster" "cluster" {
 }
 
 resource "aws_iam_role" "cluster" {
-  name = "eks-cluster-example"
+  name = "${var.name}-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -93,3 +95,31 @@ resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSNetworkingPolicy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy"
   role       = aws_iam_role.cluster.name
 }
+
+
+resource "aws_iam_role" "node" {
+  name = "${var.name}-node-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = ["sts:AssumeRole"]
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "node_AmazonEKSWorkerNodeMinimalPolicy" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy"
+  role       = aws_iam_role.node.name
+}
+
+resource "aws_iam_role_policy_attachment" "node_AmazonEC2ContainerRegistryPullOnly" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly"
+  role       = aws_iam_role.node.name
+}
+
