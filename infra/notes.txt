@@ -1,4 +1,5 @@
 
+https://developer.hashicorp.com/terraform/language/style
 
 https://docs.aws.amazon.com/eks/latest/userguide/automode-get-started-cli.html
 
