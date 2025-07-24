@@ -52,6 +52,16 @@ resource "aws_eks_cluster" "cluster" {
 
 }
 
+resource "aws_eks_access_policy_association" "creator" {
+  cluster_name  = aws_eks_cluster.cluster.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = local.iamRole
+
+  access_scope {
+    type = "cluster"
+  }
+}
+
 resource "aws_iam_role" "cluster" {
   name = "${var.name}-role"
   assume_role_policy = jsonencode({
