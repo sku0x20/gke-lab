@@ -11,6 +11,8 @@ https://docs.aws.amazon.com/eks/latest/userguide/create-kubeconfig.html
 
 https://docs.aws.amazon.com/eks/latest/userguide/pod-identities.html
 
+https://docs.aws.amazon.com/eks/latest/userguide/settings-auto.html
+
 aws eks list-clusters
 aws eks update-kubeconfig --name k8sSample-cluster
 
