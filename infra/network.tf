@@ -18,6 +18,7 @@ resource "aws_subnet" "a-1" {
 
   tags = {
     Name = "${var.name}-${var.region}a"
+    "kubernetes.io/role/elb" = 1
   }
 }
 
@@ -29,6 +30,7 @@ resource "aws_subnet" "b-1" {
 
   tags = {
     Name = "${var.name}-${var.region}b"
+    "kubernetes.io/role/elb" = 1
   }
 }
 
@@ -41,6 +43,7 @@ resource "aws_subnet" "c-1" {
 
   tags = {
     Name = "${var.name}-${var.region}c"
+    "kubernetes.io/role/elb" = 1
   }
 }
 
