@@ -10,7 +10,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /2048
+          - path: /
             pathType: Prefix
             backend:
               service:
