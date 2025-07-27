@@ -4,9 +4,7 @@ metadata:
   name: ingress-2048
   namespace: lb
   annotations:
-    alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/group.name: apps-group
 spec:
   ingressClassName: alb
   rules:
