@@ -49,6 +49,11 @@ resource "aws_eks_cluster" "cluster" {
 
 }
 
+resource "aws_eks_addon" "metric-server" {
+  addon_name   = "metrics-server"
+  cluster_name = aws_eks_cluster.cluster.name
+}
+
 resource "aws_eks_access_entry" "admin" {
   cluster_name  = aws_eks_cluster.cluster.name
   principal_arn = local.current_iamRole

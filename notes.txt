@@ -18,6 +18,8 @@ https://docs.aws.amazon.com/eks/latest/userguide/create-storage-class.html
 https://docs.aws.amazon.com/eks/latest/userguide/auto-configure-alb.html
 https://kubernetes-sigs.github.io/aws-load-balancer-controller/v2.2/guide/ingress/ingress_class/#specgroup
 
+https://repost.aws/questions/QUAd5E0MtlTHmvwoGS85eX8Q/does-eks-1-31-come-with-metrics-server-preinstalled
+
 aws eks list-clusters
 aws eks update-kubeconfig --name k8sSample-cluster
 
