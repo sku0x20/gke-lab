@@ -72,7 +72,9 @@ server:
     size: 16Gi
   extraLabels: { }
   podLabels: { }
-  podAnnotations: { }
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8428"
   resources:
     limits:
       memory: 512Mi
