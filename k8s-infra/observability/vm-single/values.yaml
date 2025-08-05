@@ -1,4 +1,5 @@
 global:
+  namespaceOverride: "observability"
   imagePullSecrets: [ ]
   image:
     registry: ""
