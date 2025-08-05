@@ -51,7 +51,7 @@ podDisruptionBudget:
   labels: { }
 
 remoteWrite:
-  - url: http://vm-single-victoria-metrics-single-server:8420/insert/0/prometheus
+  - url: http://vm-single-victoria-metrics-single-server:8428/insert/0/prometheus
 
 # -- VMAgent extra command line arguments
 extraArgs:
