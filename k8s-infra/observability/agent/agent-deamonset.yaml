@@ -9,8 +9,6 @@ global:
   cluster:
     dnsDomain: cluster.local.
 
-replicaCount: 1
-
 lifecycle: { }
 
 schedulerName: ""
@@ -28,7 +26,7 @@ image:
 
 imagePullSecrets: [ ]
 
-nameOverride: "podCollector"
+nameOverride: "pod-collector"
 
 fullnameOverride: ""
 
@@ -53,7 +51,7 @@ podDisruptionBudget:
   labels: { }
 
 remoteWrite:
-  - url: http://vm-insert:8480/insert/0/prometheus
+  - url: http://vm-single-victoria-metrics-single-server:8420/insert/0/prometheus
 
 # -- VMAgent extra command line arguments
 extraArgs:
@@ -61,14 +59,6 @@ extraArgs:
   envflag.prefix: VM_
   loggerFormat: json
   httpListenAddr: :8429
-  # promscrape.maxScrapeSize: "167772160"
-
-  # Uncomment and specify the port if you want to support any of the protocols:
-  # https://docs.victoriametrics.com/vmagent#features
-  # graphiteListenAddr: ":2003"
-  # influxListenAddr: ":8189"
-  # opentsdbHTTPListenAddr: ":4242"
-  # opentsdbListenAddr: ":4242"
 
 env: [ ]
 envFrom: [ ]
@@ -99,7 +89,7 @@ service:
   servicePort: 8429
   targetPort: http
   type: ClusterIP
-  internalTrafficPolicy: "local"
+  internalTrafficPolicy: "Local"
 
 ingress:
   enabled: false
@@ -110,7 +100,7 @@ resources:
     memory: 128Mi
   requests:
     cpu: 100m
-  memory: 128Mi
+    memory: 128Mi
 
 annotations: { }
 podAnnotations: { }
@@ -155,24 +145,24 @@ config:
       relabel_configs:
         - action: drop
           source_labels: [ __meta_kubernetes_pod_container_init ]
-          regex: "true"
+          regex: true
         - action: keep_if_equal
           source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_container_port_number ]
         - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
           action: keep
-          regex: "true"
+          regex: true
         - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_path ]
           action: replace
           target_label: __metrics_path__
-          regex: "(.+)"
+          regex: (.+)
         - source_labels:
             [ __address__, __meta_kubernetes_pod_annotation_prometheus_io_port ]
           action: replace
-          regex: "([^:]+)(?::\d+)?;(\d+)"
+          regex: ([^:]+)(?::\d+)?;(\d+)
           replacement: $1:$2
           target_label: __address__
         - action: labelmap
-          regex: "__meta_kubernetes_pod_label_(.+)"
+          regex: __meta_kubernetes_pod_label_(.+)
         - source_labels: [ __meta_kubernetes_pod_name ]
           target_label: pod
         - source_labels: [ __meta_kubernetes_pod_container_name ]
