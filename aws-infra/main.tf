@@ -52,6 +52,10 @@ resource "aws_eks_cluster" "cluster" {
 resource "aws_eks_addon" "metric-server" {
   addon_name   = "metrics-server"
   cluster_name = aws_eks_cluster.cluster.name
+
+  depends_on = [
+    aws_eks_cluster.cluster
+  ]
 }
 
 resource "aws_eks_access_entry" "admin" {
