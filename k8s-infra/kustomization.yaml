@@ -4,3 +4,4 @@ resources:
   - storage
   - lb
   - apps
+  - observability
