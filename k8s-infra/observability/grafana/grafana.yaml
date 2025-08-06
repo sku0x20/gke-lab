@@ -1,0 +1,46 @@
+replicas: 1
+service:
+  enabled: true
+  type: ClusterIp
+  port: 80
+  headlessService: false
+ingress:
+  enabled: false
+resources:
+  limits:
+    cpu: 250m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+persistence:
+  enabled: true
+  type: pvc
+  size: 10Gi
+  accessModes: [ ReadWriteOnce ]
+initChownData:
+  enabled: true
+sidecar:
+  alerts:
+    enabled: false
+  dashboards:
+    enabled: false
+  datasources:
+    enabled: false
+  notifiers:
+    enabled: false
+serviceAccount:
+  create: false
+rbac:
+  create: false
+testFramework:
+  enabled: false
+serviceMonitor:
+  enabled: false
+imageRenderer:
+  enabled: false
+networkPolicy:
+  enabled: false
+
+grafana.ini:
+# TODO:
