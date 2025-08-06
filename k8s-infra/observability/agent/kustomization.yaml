@@ -7,3 +7,8 @@ helmCharts:
     releaseName: pod-collector
     namespace: observability
     valuesFile: pod-collector.yaml
+  - name: victoria-metrics-agent
+    repo: https://victoriametrics.github.io/helm-charts
+    releaseName: k8s-collector
+    namespace: observability
+    valuesFile: k8s-collector.yaml
