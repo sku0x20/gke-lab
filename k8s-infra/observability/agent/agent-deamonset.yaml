@@ -15,7 +15,12 @@ schedulerName: ""
 
 mode: daemonSet
 daemonSet:
-  spec: { }
+  spec:
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
 
 image:
   registry: ""
@@ -26,7 +31,7 @@ image:
 
 imagePullSecrets: [ ]
 
-nameOverride: "pod-collector"
+nameOverride: ""
 
 fullnameOverride: ""
 
