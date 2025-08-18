@@ -1,0 +1,203 @@
+global:
+  namespaceOverride: observability
+  imagePullSecrets: [ ]
+  image:
+    registry: ""
+  compatibility:
+    openshift:
+      adaptSecurityContext: "auto"
+  cluster:
+    dnsDomain: cluster.local.
+
+lifecycle: { }
+
+schedulerName: ""
+
+mode: daemonSet
+daemonSet:
+  spec:
+    updateStrategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+
+image:
+  registry: ""
+  repository: victoriametrics/vmagent
+  tag: "" # rewrites Chart.AppVersion
+  variant: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: [ ]
+
+nameOverride: ""
+
+fullnameOverride: ""
+
+containerWorkingDir: "/"
+
+rbac:
+  create: true
+  annotations: { }
+  extraLabels: { }
+  namespaced: false
+
+serviceAccount:
+  create: true
+  annotations: { }
+  name:
+  automountToken: true
+
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 1
+  labels: { }
+
+remoteWrite:
+  - url: http://vm-single-victoria-metrics-single-server:8428/api/v1/write
+
+# -- VMAgent extra command line arguments
+extraArgs:
+  envflag.enable: true
+  envflag.prefix: VM_
+  loggerFormat: json
+  httpListenAddr: :8429
+
+env: [ ]
+envFrom: [ ]
+extraLabels: { }
+podLabels: { }
+extraHostPathMounts: [ ]
+extraVolumes: [ ]
+extraVolumeMounts: [ ]
+extraContainers: [ ]
+initContainers: [ ]
+podSecurityContext:
+  enabled: true
+  # fsGroup: 2000
+securityContext:
+  enabled: true
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  enabled: true
+  annotations: { }
+  extraLabels: { }
+  clusterIP: ""
+  servicePort: 8429
+  targetPort: http
+  type: ClusterIP
+  internalTrafficPolicy: "Local"
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+annotations: { }
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8429"
+nodeSelector: { }
+tolerations: [ ]
+topologySpreadConstraints: [ ]
+affinity: { }
+configMap: ""
+priorityClassName: ""
+
+serviceMonitor:
+  enabled: false
+emptyDir: { }
+
+persistentVolume:
+  enabled: false
+
+horizontalPodAutoscaling:
+  enabled: false
+
+# -- VMAgent scrape configuration
+config:
+  global:
+    scrape_interval: 10s
+
+  scrape_configs:
+    # Example scrape config for pods
+    #
+    # The relabeling allows the actual pod scrape endpoint to be configured via the
+    # following annotations:
+    #
+    # * `prometheus.io/scrape`: Only scrape pods that have a value of `true`
+    # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+    # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the default of `9102`.
+    #
+    - job_name: "kubernetes-pods"
+      kubernetes_sd_configs:
+        - role: pod
+      relabel_configs:
+        - action: drop
+          source_labels: [ __meta_kubernetes_pod_container_init ]
+          regex: true
+        - action: keep_if_equal
+          source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_port, __meta_kubernetes_pod_container_port_number ]
+        - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_scrape ]
+          action: keep
+          regex: true
+        - source_labels: [ __meta_kubernetes_pod_annotation_prometheus_io_path ]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels:
+            [ __address__, __meta_kubernetes_pod_annotation_prometheus_io_port ]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+        - action: labelmap
+          regex: __meta_kubernetes_pod_label_(.+)
+        - source_labels: [ __meta_kubernetes_pod_name ]
+          target_label: pod
+        - source_labels: [ __meta_kubernetes_pod_container_name ]
+          target_label: container
+        - source_labels: [ __meta_kubernetes_namespace ]
+          target_label: namespace
+        - source_labels: [ __meta_kubernetes_pod_node_name ]
+          action: replace
+          target_label: node
+
+# -- Extra scrape configs that will be appended to `config`
+extraScrapeConfigs: [ ]
+
+probe:
+  # -- Readiness probe
+  readiness:
+    httpGet: { }
+    initialDelaySeconds: 5
+    periodSeconds: 15
+  # -- Liveness probe
+  liveness:
+    tcpSocket: { }
+    initialDelaySeconds: 5
+    periodSeconds: 15
+    timeoutSeconds: 5
+  # -- Startup probe
+  startup: { }
+
+# -- Add extra specs dynamically to this chart
+extraObjects: [ ]
+
+allowedMetricsEndpoints:
+  - /metrics
+
