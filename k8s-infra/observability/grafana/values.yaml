@@ -1,7 +1,7 @@
 replicas: 1
 service:
   enabled: true
-  type: ClusterIp
+  type: ClusterIP
   port: 80
   headlessService: false
 ingress:
