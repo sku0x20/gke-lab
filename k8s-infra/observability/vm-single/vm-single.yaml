@@ -1,0 +1,6 @@
+releaseName: vm-single
+namespace: observability
+valuesFile: values.yaml
+chartName: victoria-metrics-single
+repo: vm
+repoUrl: https://victoriametrics.github.io/helm-charts
