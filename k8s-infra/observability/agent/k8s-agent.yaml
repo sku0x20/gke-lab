@@ -1,0 +1,6 @@
+releaseName: k8s-agent
+namespace: observability
+valuesFile: k8s-collector.yaml
+chartName: victoria-metrics-agent
+repo: vm
+repoUrl: https://victoriametrics.github.io/helm-charts
