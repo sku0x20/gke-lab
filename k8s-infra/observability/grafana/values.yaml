@@ -1,4 +1,5 @@
 replicas: 1
+useStatefulSet: true
 service:
   enabled: true
   type: ClusterIP
