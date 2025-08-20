@@ -1,0 +1,48 @@
+replicaCount: 1
+
+crds:
+  install: true
+  keep: false
+
+serviceAccount:
+  create: true
+  automount: true
+  name: dragonfly-operator-controller-manager
+
+podAnnotations:
+  kubectl.kubernetes.io/default-container: manager
+
+podSecurityContext:
+  runAsNonRoot: true
+
+service:
+  type: ClusterIP
+  port: 8443
+  metricsPort: 8080
+
+terminationGracePeriodSeconds: 10
+
+rbacProxy:
+  enabled: true
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+manager:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+serviceMonitor:
+  enabled: false
+
+grafanaDashboard:
+  enabled: false
