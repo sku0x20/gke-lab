@@ -2,6 +2,7 @@
 apiVersion: dragonflydb.io/v1alpha1
 kind: Dragonfly
 metadata:
+  namespace: dbs
   labels:
     app.kubernetes.io/name: dragonfly
     app.kubernetes.io/instance: dragonfly-sample
