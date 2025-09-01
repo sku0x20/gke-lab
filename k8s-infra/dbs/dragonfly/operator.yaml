@@ -1,0 +1,6 @@
+releaseName: dragonfly-operator
+namespace: dbs
+valuesFile: operator-values.yaml
+chartName: dragonfly-operator
+repo: oci://ghcr.io/dragonflydb/dragonfly-operator/helm
+repoUrl: oci://ghcr.io/dragonflydb/dragonfly-operator/helm
