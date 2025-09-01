@@ -2,6 +2,6 @@ releaseName: dragonfly-operator
 namespace: dbs
 valuesFile: operator-values.yaml
 chartName: dragonfly-operator
-version: 1.33.1
+version: v1.2.1
 repo: oci://ghcr.io/dragonflydb/dragonfly-operator/helm
 repoUrl: oci://ghcr.io/dragonflydb/dragonfly-operator/helm
