@@ -1,0 +1,7 @@
+releaseName: percona-mongo-operator
+namespace: dbs
+valuesFile: operator-values.yaml
+chartName: psmdb-operator
+version: 1.20.0
+repo: percona
+repoUrl: https://percona.github.io/percona-helm-charts/
