@@ -23,3 +23,7 @@ https://repost.aws/questions/QUAd5E0MtlTHmvwoGS85eX8Q/does-eks-1-31-come-with-me
 aws eks list-clusters
 aws eks update-kubeconfig --name k8sSample-cluster
 
+
+
+kubectl run socks-proxy -it --rm --restart=Never --image=serjs/go-socks5-proxy --namespace=dbs
+kubectl port-forward pod/socks-proxy 1080:1080 -n dbs
