@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -v
+#set -v
 
 pids=()
 
@@ -19,7 +19,7 @@ kubectl wait --for=condition=Ready pod/socks-proxy --timeout=120s -n=dbs
 kubectl port-forward pod/socks-proxy 2080:2080 -n dbs &
 pids+=($!)
 
-gost -L=socks5://:1080 -F=socks5://127.0.0.1:2080 &
-pids+=($!)
+#gost -L=socks5://:1080 -F=socks5://127.0.0.1:2080 &
+#pids+=($!)
 
 wait
