@@ -1,0 +1,4 @@
+[tools]
+opentofu = "1.13.1"
+kubectl = "1.37.1"
+gcloud = "589.0.0"
