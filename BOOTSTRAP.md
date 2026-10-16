@@ -1,33 +1,42 @@
 # Bootstrap
 
-Manual GCP setup, before tofu. Run from repo root (mise env).
+One-time manual setup of the GCP project, done before OpenTofu takes over.
+Run everything from the repo root so the mise env (personal gcloud config, project) is active.
 
-## Auth
+## 0. Auth
 
 ```sh
-gcloud auth login
-gcloud auth application-default login
+gcloud auth login                       # gcloud CLI
+gcloud auth application-default login   # ADC, used by the tofu google provider
 ```
 
-## Project
+Both write into `CLOUDSDK_CONFIG` (`~/.config/gcloud-personal`), not the default `~/.config/gcloud`.
+
+## 1. Project
 
 ```sh
 gcloud projects create "$GOOGLE_PROJECT"
 ```
 
-## Billing
+Console: Home → Dashboard
+
+## 2. Link billing
 
 ```sh
 BA=$(gcloud billing accounts list --filter=open=true --format="value(name.basename())")
 gcloud billing projects link "$GOOGLE_PROJECT" --billing-account="$BA" --format=none
+gcloud billing projects describe "$GOOGLE_PROJECT" --format="value(billingEnabled)"   # True
 ```
+
+`$BA` holds the billing account ID. It's never echoed, and `--format=none` keeps it out of the output.
 
 Console: Billing → Account management
 
-## Budget
+## 3. Budget alert
 
 ```sh
 gcloud services enable billingbudgets.googleapis.com
+
 gcloud billing budgets create \
   --billing-account="$BA" \
   --display-name="lab-gke-2610" \
@@ -42,19 +51,22 @@ gcloud billing budgets create \
   --format="value(displayName)"
 ```
 
-Alerts only, no cap.
+- The budget **only sends alerts** (by email to the billing admins). It does not stop spending.
+- Spend cap enforcement exists, but only for Gemini API, Vertex AI and Cloud Run, not GKE or Compute. The real safeguards are `tofu destroy` after each session and deleting the project at the end.
 
 Console: Billing → Budgets & alerts
 
-## APIs
+## 4. APIs
 
 ```sh
 gcloud services enable container.googleapis.com
 ```
 
-Not managed by tofu: destroy would disable them.
+This also enables its dependencies (`compute`, `oslogin`, ...) and creates the Compute Engine default service account.
 
-Console: APIs & Services → Enabled APIs & services
+APIs are enabled here rather than in tofu: `google_project_service` disables them on `tofu destroy` by default, and disabling `compute` while resources still exist breaks things.
+
+Console: APIs & Services → Enabled APIs & services; IAM & Admin → Service accounts
 
 ## Teardown
 
@@ -62,4 +74,4 @@ Console: APIs & Services → Enabled APIs & services
 gcloud projects delete "$GOOGLE_PROJECT"
 ```
 
-Delete the budget separately.
+The budget lives on the billing account, not the project, so delete it separately in Billing → Budgets & alerts.
