@@ -6,5 +6,8 @@ kubectl = "1.37.1"
 # personal Google account, isolated from the default (work) ~/.config/gcloud
 CLOUDSDK_CONFIG = "{{env.HOME}}/.config/gcloud-personal"
 GOOGLE_APPLICATION_CREDENTIALS = "{{env.CLOUDSDK_CONFIG}}/application_default_credentials.json"
+# project: GOOGLE_PROJECT for the tofu google provider, CLOUDSDK_CORE_PROJECT for gcloud
+GOOGLE_PROJECT = "lab-gke-2610"
+CLOUDSDK_CORE_PROJECT = "{{env.GOOGLE_PROJECT}}"
 # repo-local kubeconfig, so cluster contexts don't touch ~/.kube/config
 KUBECONFIG = "{{config_root}}/.kube/config"
