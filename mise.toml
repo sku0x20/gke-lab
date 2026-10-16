@@ -1,3 +1,10 @@
 [tools]
 opentofu = "1.13.1"
 kubectl = "1.37.1"
+
+[env]
+# personal Google account, isolated from the default (work) ~/.config/gcloud
+CLOUDSDK_CONFIG = "{{env.HOME}}/.config/gcloud-personal"
+GOOGLE_APPLICATION_CREDENTIALS = "{{env.CLOUDSDK_CONFIG}}/application_default_credentials.json"
+# repo-local kubeconfig, so cluster contexts don't touch ~/.kube/config
+KUBECONFIG = "{{config_root}}/.kube/config"
