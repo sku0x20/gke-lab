@@ -1,6 +1,0 @@
-releaseName: grafana
-namespace: observability
-valuesFile: values.yaml
-chartName: grafana
-repo: grafana
-repoUrl: https://grafana.github.io/helm-charts

@@ -1,7 +1,0 @@
-releaseName: percona-mongodb-cluster
-namespace: dbs
-valuesFile: cluster-values.yaml
-chartName: psmdb-db
-version: 1.20.1
-repo: percona
-repoUrl: https://percona.github.io/percona-helm-charts/
