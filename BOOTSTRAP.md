@@ -12,6 +12,12 @@ gcloud auth application-default login   # ADC, used by the tofu google provider
 
 Both write into `CLOUDSDK_CONFIG` (`~/.config/gcloud-personal`), not the default `~/.config/gcloud`.
 
+```sh
+gcloud components install gke-gcloud-auth-plugin
+```
+
+kubectl calls this plugin to turn your gcloud login into a token for the cluster. Without it, `get-credentials` still succeeds, but every kubectl call fails. It lives inside the gcloud install, so reinstall it after a `brew upgrade` of gcloud-cli.
+
 ## 1. Project
 
 ```sh
@@ -60,9 +66,10 @@ Console: Billing → Budgets & alerts
 
 ```sh
 gcloud services enable container.googleapis.com
+gcloud services enable cloudresourcemanager.googleapis.com
 ```
 
-This also enables its dependencies (`compute`, `oslogin`, ...) and creates the Compute Engine default service account.
+`container` also enables its dependencies (`compute`, `oslogin`, ...) and creates the Compute Engine default service account. `cloudresourcemanager` lets tofu read and write project IAM policy (`google_project_iam_member`).
 
 APIs are enabled here rather than in tofu: `google_project_service` disables them on `tofu destroy` by default, and disabling `compute` while resources still exist breaks things.
 
