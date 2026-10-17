@@ -58,7 +58,7 @@ gcloud billing budgets create \
 ```
 
 - The budget **only sends alerts** (by email to the billing admins). It does not stop spending.
-- Spend cap enforcement exists, but only for Gemini API, Vertex AI and Cloud Run, not GKE or Compute. The real safeguards are `tofu destroy` after each session and deleting the project at the end.
+- Spend cap enforcement exists, but only for Gemini API, Vertex AI and Cloud Run, not GKE or Compute. The real safeguards are destroying `infra/dynamic` after each session and deleting the project at the end.
 
 Console: Billing → Budgets & alerts
 
@@ -104,6 +104,23 @@ gcloud storage buckets update "gs://$GOOGLE_PROJECT-tfstate" --lifecycle-file=/t
 - Versioning keeps the old copy each time the state is overwritten, so a bad apply can be rolled back. The lifecycle rule keeps the 10 most recent old versions. Count beats age here: after a long break, an age rule would leave nothing to roll back to.
 
 Console: Cloud Storage → Buckets → Configuration / Protection / Lifecycle tabs
+
+## 6. OpenTofu roots
+
+Two roots, split by lifetime, each with its own state prefix in the bucket:
+
+- `infra/static`: VPC, subnet, node service account. Free when idle; applied once and left up.
+- `infra/dynamic`: Cloud NAT and the cluster. Costs while up; applied and destroyed each session.
+
+```sh
+tofu -chdir=infra/static init && tofu -chdir=infra/static apply     # once
+tofu -chdir=infra/dynamic init && tofu -chdir=infra/dynamic apply   # each session
+tofu -chdir=infra/dynamic destroy                                   # end of each session
+```
+
+Dynamic finds static's resources by name (data sources), so its plan fails if static isn't applied.
+
+Don't destroy `infra/static` in the normal flow. It holds what must outlive the cluster, such as secrets, whose values would have to be re-added. To start from scratch, destroy dynamic first, then static: the VPC can't be deleted while the NAT or cluster still uses it.
 
 ## Teardown
 
