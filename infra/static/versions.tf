@@ -11,6 +11,6 @@ terraform {
   # hardcoded: a backend block can't read env vars like $GOOGLE_PROJECT
   backend "gcs" {
     bucket = "lab-gke-2610-tfstate"
-    prefix = "infra"
+    prefix = "infra/static"
   }
 }
