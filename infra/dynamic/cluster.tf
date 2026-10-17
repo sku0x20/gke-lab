@@ -33,6 +33,11 @@ resource "google_container_cluster" "lab" {
     channel = "REGULAR"
   }
 
+  # Secret Manager add-on: CSI driver that mounts secrets as files in pods, via Workload Identity
+  secret_manager_config {
+    enabled = true
+  }
+
   # on Autopilot this only sets node defaults; GKE manages the autoscaling itself
   cluster_autoscaling {
     auto_provisioning_defaults {
