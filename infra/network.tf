@@ -3,7 +3,7 @@ resource "google_compute_network" "vpc" {
   name                    = "lab"
   auto_create_subnetworks = false
 
-  # gives the VPC a private /48 from fd20::/20 (ULA, IPv6's 10.0.0.0/8); INTERNAL subnets carve /64s from it
+  # gives the VPC a private /48 from fd20::/20, Google's slice of ULA (fd00::/8, IPv6's 10.0.0.0/8); INTERNAL subnets carve /64s from it
   enable_ula_internal_ipv6 = true
 }
 
