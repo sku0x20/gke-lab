@@ -30,8 +30,6 @@ Disk snapshots only, no logical backups; we don't keep in-memory store data long
 - A snapshot of the live disk is crash-consistent, which is what AOF recovers from: at most ~1s of writes lost, a cut-off last write dropped.
 - Restore: new PVC from the snapshot, Valkey replays the AOF on boot.
 - GCE snapshots are multi-regional by default, so they survive losing the disk's zone.
-- Need an RDB file to migrate (Memorystore, Redis)? `valkey-cli --rdb dump.rdb` on demand.
-- Scheduling is still open: Backup for GKE (paid), a CronJob creating `VolumeSnapshot`s, or a GCE snapshot schedule (awkward, the disk is dynamically provisioned).
 
 ## Per app or shared
 
