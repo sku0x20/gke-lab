@@ -9,4 +9,5 @@ labels:
   - pairs:
       app.kubernetes.io/name: valkey
 
-resources: []
+resources:
+  - namespace.yaml
