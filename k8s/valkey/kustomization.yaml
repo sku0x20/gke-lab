@@ -12,6 +12,7 @@ labels:
 resources:
   - namespace.yaml
   - serviceaccount.yaml
+  - secretproviderclass.yaml
 
 # name gets a content hash, so a config change rolls the pod
 configMapGenerator:
