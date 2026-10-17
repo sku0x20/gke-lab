@@ -1,8 +1,12 @@
 [tools]
 opentofu = "1.13.1"
 kubectl = "1.37.1"
+# gcloud runtime; Homebrew python links OpenSSL 4, which dropped ssl.PROTOCOL_TLSv1 and breaks gcloud storage
+python = "3.14.8"
 
 [env]
+# use the mise python above, not the Homebrew one (takes precedence over gcloud's virtenv)
+CLOUDSDK_PYTHON = "python3"
 # isolated from the default ~/.config/gcloud
 CLOUDSDK_CONFIG = "{{env.HOME}}/.config/gcloud-personal"
 GOOGLE_APPLICATION_CREDENTIALS = "{{env.CLOUDSDK_CONFIG}}/application_default_credentials.json"
