@@ -12,3 +12,7 @@ data "google_compute_subnetwork" "gke" {
 data "google_service_account" "gke_nodes" {
   account_id = "gke-nodes"
 }
+
+data "google_secret_manager_secret" "valkey_acl" {
+  secret_id = "valkey-acl"
+}
