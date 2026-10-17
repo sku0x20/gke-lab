@@ -1,5 +1,5 @@
 #!/bin/sh
-# valkey-cli logged in as admin; run inside the pod: sh /etc/valkey/cli.sh [valkey-cli args]
+# valkey-cli logged in as admin; on PATH in the pod as vcli: kubectl exec -it valkey-0 -n valkey -- vcli [valkey-cli args]
 # the password is read from the mounted ACL file and never printed
 set -eu
 

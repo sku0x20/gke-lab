@@ -14,10 +14,11 @@ resources:
   - serviceaccount.yaml
   - secretproviderclass.yaml
   - service.yaml
+  - statefulset.yaml
 
 # name gets a content hash, so a config change rolls the pod
 configMapGenerator:
   - name: valkey-config
     files:
       - valkey.conf
-      - cli.sh # admin valkey-cli inside the pod: sh /etc/valkey/cli.sh
+      - cli.sh # admin valkey-cli inside the pod, on PATH as vcli

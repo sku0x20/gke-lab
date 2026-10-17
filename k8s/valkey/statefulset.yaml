@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: valkey
+spec:
+  # one instance (see NOTES.md); the pod is valkey-0, with its own disk
+  replicas: 1
+  # the headless Service that gives the pod its DNS name
+  serviceName: valkey
+  # kustomize's labels leave selectors and templates alone, so both are set here
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valkey
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: valkey
+    spec:
+      # Workload Identity: the CSI driver fetches the ACL secret as this KSA
+      serviceAccountName: valkey
+      # time to save to disk on shutdown before SIGKILL
+      terminationGracePeriodSeconds: 60
+      # restricted Pod Security Standard (the namespace enforces it)
+      securityContext:
+        # the image's valkey user; the image defaults to root
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        # a new disk is owned by root: chown it to this group once, not on every start
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: valkey
+          image: valkey/valkey:9.1.2
+          # skip the image's entrypoint script, which expects to start as root
+          command: ["valkey-server", "/etc/valkey/valkey.conf"]
+          ports:
+            - name: valkey
+              containerPort: 6379
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # Valkey only writes to /data
+            readOnlyRootFilesystem: true
+          # Autopilot sets limits = requests; maxmemory in valkey.conf is half the memory
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 512Mi
+          # ready = answers PING as admin; out of the Service's DNS while loading the AOF.
+          # compare the reply: valkey-cli exits 0 on errors like LOADING
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", '[ "$(vcli ping)" = PONG ]']
+            periodSeconds: 10
+          # alive = port open; Valkey accepts connections while loading, so a long load isn't killed
+          livenessProbe:
+            tcpSocket:
+              port: valkey
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /etc/valkey
+            # cli.sh on PATH as vcli
+            - name: config
+              mountPath: /usr/local/bin/vcli
+              subPath: cli.sh
+            - name: acl
+              mountPath: /etc/valkey-acl
+              readOnly: true
+      volumes:
+        # kustomize appends the generated name's hash here
+        - name: config
+          configMap:
+            name: valkey-config
+            items:
+              - key: valkey.conf
+                path: valkey.conf
+              - key: cli.sh
+                path: cli.sh
+                mode: 0555 # configmap files are 0644 by default
+        # users.acl from Secret Manager (secretproviderclass.yaml); no Kubernetes Secret involved
+        - name: acl
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: valkey-acl
+  # one PVC per pod (data-valkey-0); can't be changed after creation
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        # GKE's default: balanced persistent disk
+        storageClassName: standard-rwo
+        resources:
+          requests:
+            # the minimum size for this disk type; AOF rewrites need about 2x the data
+            storage: 10Gi
