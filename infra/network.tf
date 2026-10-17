@@ -2,9 +2,6 @@
 resource "google_compute_network" "vpc" {
   name                    = "lab"
   auto_create_subnetworks = false
-
-  # gives the VPC a private /48 from fd20::/20, Google's slice of ULA (fd00::/8, IPv6's 10.0.0.0/8); INTERNAL subnets carve /64s from it
-  enable_ula_internal_ipv6 = true
 }
 
 # primary range = node IPs; secondary ranges = pod and service IPs (VPC-native)
@@ -14,9 +11,13 @@ resource "google_compute_subnetwork" "gke" {
   ip_cidr_range            = "10.10.0.0/20"
   private_ip_google_access = true # private nodes reach Google APIs (Artifact Registry, logging) without NAT
 
-  # dual-stack: subnet also gets an IPv6 /64; GKE carves node, pod and service IPv6 ranges from it
-  stack_type       = "IPV4_IPV6"
-  ipv6_access_type = "INTERNAL" # ULA, not internet-routable, matching private nodes; immutable once set
+  # dual-stack: subnet also gets an IPv6 /64; each node takes a /96 from it for itself and its pods
+  stack_type = "IPV4_IPV6"
+
+  # EXTERNAL = public IPv6 (no NAT66 exists): reaches IPv6-only sites, allows IPv6 L4 LBs.
+  # private nodes only covers IPv4; inbound IPv6 is still blocked by the VPC's implied deny-ingress rule.
+  # immutable once set
+  ipv6_access_type = "EXTERNAL"
 
   secondary_ip_range {
     range_name    = "pods"
