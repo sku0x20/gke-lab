@@ -67,9 +67,10 @@ Console: Billing → Budgets & alerts
 ```sh
 gcloud services enable container.googleapis.com
 gcloud services enable cloudresourcemanager.googleapis.com
+gcloud services enable secretmanager.googleapis.com
 ```
 
-`container` also enables its dependencies (`compute`, `oslogin`, ...) and creates the Compute Engine default service account. `cloudresourcemanager` lets tofu read and write project IAM policy (`google_project_iam_member`).
+`container` also enables its dependencies (`compute`, `oslogin`, ...) and creates the Compute Engine default service account. `cloudresourcemanager` lets tofu read and write project IAM policy (`google_project_iam_member`). `secretmanager` holds app secrets, mounted into pods by GKE's Secret Manager add-on.
 
 APIs are enabled here rather than in tofu: `google_project_service` disables them on `tofu destroy` by default, and disabling `compute` while resources still exist breaks things.
 
@@ -119,6 +120,14 @@ tofu -chdir=infra/dynamic destroy                                   # end of eac
 ```
 
 Dynamic finds static's resources by name (data sources), so its plan fails if static isn't applied.
+
+Static creates secrets empty; tofu never sees their values. Add each value once after the first static apply:
+
+```sh
+# Valkey: one ACL line, random password, never printed
+printf 'user default on >%s ~* &* +@all\n' "$(openssl rand -hex 32)" \
+  | gcloud secrets versions add valkey-acl --data-file=-
+```
 
 Don't destroy `infra/static` in the normal flow. It holds what must outlive the cluster, such as secrets, whose values would have to be re-added. To start from scratch, destroy dynamic first, then static: the VPC can't be deleted while the NAT or cluster still uses it.
 
