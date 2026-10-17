@@ -1,7 +1,6 @@
 [tools]
 opentofu = "1.13.1"
 kubectl = "1.37.1"
-k9s = "0.51.0"
 k9s = "latest"
 
 [env]
