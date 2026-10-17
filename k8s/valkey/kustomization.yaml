@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# sets metadata.namespace on every resource below
+namespace: valkey
+
+# added to every resource's metadata.labels; selectors are left alone
+labels:
+  - pairs:
+      app.kubernetes.io/name: valkey
+
+resources: []
