@@ -68,6 +68,25 @@ APIs are enabled here rather than in tofu: `google_project_service` disables the
 
 Console: APIs & Services → Enabled APIs & services; IAM & Admin → Service accounts
 
+## 5. State bucket
+
+```sh
+gcloud storage buckets create "gs://$GOOGLE_PROJECT-tfstate" \
+  --location=asia-south1 \
+  --uniform-bucket-level-access \
+  --public-access-prevention
+
+gcloud storage buckets update "gs://$GOOGLE_PROJECT-tfstate" --versioning
+gcloud storage buckets update "gs://$GOOGLE_PROJECT-tfstate" --lifecycle-file=tfstate-lifecycle.json
+```
+
+- Holds the OpenTofu state. It's created by hand because tofu can't store its state in a bucket that tofu itself creates.
+- Bucket names are global across all of GCS, so the project ID prefix keeps it unique.
+- Public access prevention is on because state files can contain secrets.
+- Versioning keeps the old copy each time the state is overwritten, so a bad apply can be rolled back. `tfstate-lifecycle.json` keeps the 10 most recent old versions. Count beats age here: after a long break, an age rule would leave nothing to roll back to.
+
+Console: Cloud Storage → Buckets → Configuration / Protection / Lifecycle tabs
+
 ## Teardown
 
 ```sh

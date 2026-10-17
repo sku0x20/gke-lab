@@ -1,0 +1,8 @@
+  {
+    "rule": [
+      {
+        "action": { "type": "Delete" },
+        "condition": { "isLive": false, "numNewerVersions": 10 }
+      }
+    ]
+  }
