@@ -2,6 +2,7 @@
 opentofu = "1.13.1"
 kubectl = "1.37.1"
 k9s = "latest"
+kapp = "0.65.5"
 
 [env]
 # isolated from the default ~/.config/gcloud
