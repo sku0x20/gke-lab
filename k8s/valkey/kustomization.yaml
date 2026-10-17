@@ -17,3 +17,4 @@ configMapGenerator:
   - name: valkey-config
     files:
       - valkey.conf
+      - cli.sh # admin valkey-cli inside the pod: sh /etc/valkey/cli.sh
