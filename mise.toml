@@ -3,7 +3,7 @@ opentofu = "1.13.1"
 kubectl = "1.37.1"
 
 [env]
-# personal Google account, isolated from the default (work) ~/.config/gcloud
+# isolated from the default ~/.config/gcloud
 CLOUDSDK_CONFIG = "{{env.HOME}}/.config/gcloud-personal"
 GOOGLE_APPLICATION_CREDENTIALS = "{{env.CLOUDSDK_CONFIG}}/application_default_credentials.json"
 # project: GOOGLE_PROJECT for the tofu google provider, CLOUDSDK_CORE_PROJECT for gcloud
