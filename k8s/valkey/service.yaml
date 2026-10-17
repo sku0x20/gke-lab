@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+spec:
+  # headless: DNS returns the pod's IP directly, no virtual IP or proxying in between.
+  # also the StatefulSet's governing service, which gives the pod a stable name: valkey-0.valkey.valkey.svc
+  clusterIP: None
+  # the cluster is dual-stack and Valkey listens on both, so publish A and AAAA records
+  ipFamilyPolicy: PreferDualStack
+  # kustomize's labels leave selectors alone, so it's set here; the pod template carries the same label
+  selector:
+    app.kubernetes.io/name: valkey
+  ports:
+    # headless means no port remapping: clients connect straight to the container's 6379
+    - name: valkey
+      port: 6379
