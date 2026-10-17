@@ -11,3 +11,9 @@ labels:
 
 resources:
   - namespace.yaml
+
+# name gets a content hash, so a config change rolls the pod
+configMapGenerator:
+  - name: valkey-config
+    files:
+      - valkey.conf
