@@ -11,6 +11,8 @@ GOOGLE_PROJECT = "lab-gke-2610"
 CLOUDSDK_CORE_PROJECT = "{{env.GOOGLE_PROJECT}}"
 # repo-local kubeconfig, so cluster contexts don't touch ~/.kube/config
 KUBECONFIG = "{{config_root}}/.config/kube/config"
+# brew links only gcloud; kubectl also needs gke-gcloud-auth-plugin from the SDK bin dir
+_.path = ["/opt/homebrew/share/google-cloud-sdk/bin"]
 
 # repo-local shell history: fc -p swaps the whole in-memory list (not just the
 # file, as HISTFILE in [env] would), so global history stays out of up-arrow/ctrl-r here

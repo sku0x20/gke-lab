@@ -13,10 +13,10 @@ gcloud auth application-default login   # ADC, used by the tofu google provider
 Both write into `CLOUDSDK_CONFIG` (`~/.config/gcloud-personal`), not the default `~/.config/gcloud`.
 
 ```sh
-gcloud components install gke-gcloud-auth-plugin
+gke-gcloud-auth-plugin --version
 ```
 
-kubectl calls this plugin to turn your gcloud login into a token for the cluster. Without it, `get-credentials` still succeeds, but every kubectl call fails. It lives inside the gcloud install, so reinstall it after a `brew upgrade` of gcloud-cli.
+kubectl calls this plugin to turn your gcloud login into a token for the cluster. Without it, `get-credentials` still succeeds, but every kubectl call fails. It ships inside Homebrew's gcloud SDK, but brew links only `gcloud`, so `mise.toml` adds the SDK `bin` dir to PATH. If it's missing: `gcloud components install gke-gcloud-auth-plugin`.
 
 ## 1. Project
 
