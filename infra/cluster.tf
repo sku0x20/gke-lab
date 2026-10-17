@@ -24,6 +24,7 @@ resource "google_container_cluster" "lab" {
   ip_allocation_policy {
     cluster_secondary_range_name  = "pods"
     services_secondary_range_name = "services"
+    stack_type                    = "IPV4_IPV6" # pods get an IPv6 too; IPv6 ranges come from the subnet, no secondary ranges needed
   }
 
   # nodes get internal IPs only; outbound goes through Cloud NAT
