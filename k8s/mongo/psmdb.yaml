@@ -20,8 +20,9 @@ spec:
     setFCV: true
 
   secrets:
-    # system users (clusterAdmin, userAdmin, ...); operator generates it if missing
-    users: mongo-users
+    # system users (clusterAdmin, userAdmin, ...), not app users (spec.users);
+    # operator generates it if missing
+    users: mongo-system-users
 
   # mongo-init copies the entrypoint into each pod; restricted needs these per container
   initContainerSecurityContext:
