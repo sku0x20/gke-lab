@@ -11,9 +11,13 @@ metadata:
 spec:
   crVersion: 1.23.1 # must match the operator version
   image: percona/percona-server-mongodb:8.0.32-14
-  # no version-service lookups or automatic upgrades
   upgradeOptions:
+    # operator never changes spec.image itself; upgrade = edit image, deploy
+    # (telemetry, still on in the operator, contacts check.percona.com anyway)
     apply: disabled
+    # after a major upgrade rolls out, raise featureCompatibilityVersion to it;
+    # until then old on-disk formats stay, which is what allows a rollback
+    setFCV: true
 
   secrets:
     # system users (clusterAdmin, userAdmin, ...); operator generates it if missing
