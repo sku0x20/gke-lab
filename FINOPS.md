@@ -63,6 +63,22 @@ valkey at idle: 19m CPU used of 250m requested, 5Mi memory of 512Mi (empty datas
 4. Ephemeral storage: Autopilot adds a 1Gi request when none is set. Set a smaller one explicitly if the app writes little to its own filesystem.
 5. Autopilot enforces minimum requests and allowed CPU:memory ratios, and raises requests to fit (exact values unconfirmed). After a deploy, the `autopilot.gke.io/resource-adjustment` annotation shows what it changed.
 
+### Spot Pods
+
+The same requests, billed at a steep Spot discount. GKE can preempt the pod at any time with a short warning. A good fit for a lab that gets destroyed every session anyway. In the pod template (`spec.template.spec`):
+
+```yaml
+      # Spot pricing; GKE can preempt the pod at any time
+      nodeSelector:
+        cloud.google.com/gke-spot: "true"
+```
+
+Caveats for valkey:
+
+- A preemption restarts it, and it reloads the AOF. With `appendfsync everysec`, the last second of writes can be lost.
+- The PVC's disk is zonal, so the replacement pod has to run in that same zone. If there's no Spot capacity there, it stays `Pending`.
+- The node size still doesn't matter for cost. Spot changes the price per request, nothing else.
+
 ## Other defaults
 
 Locked by Autopilot, no direct cost: Dataplane V2, Workload Identity, Shielded Nodes, VPA, NodeLocal DNSCache, Cloud DNS, image streaming, CSI drivers (pay only for volumes).
