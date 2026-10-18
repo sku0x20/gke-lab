@@ -49,6 +49,20 @@ Paid packages cost $0.06 per million samples. One series scraped every 30s is ab
 
 Self-hosted Prometheus/Grafana isn't free on Autopilot: you pay for those pods' CPU, memory and disk. Autopilot also blocks privileged DaemonSets like node-exporter. It only pays off for a 24/7 cluster with lots of series, or for learning the stack itself.
 
+## Pod requests
+
+Autopilot bills each pod's requests (vCPU, memory, ephemeral storage) for as long as it runs. Actual usage doesn't count, and neither does bursting above the request into idle node CPU. Oversized requests are the waste.
+
+valkey at idle: 19m CPU used of 250m requested, 5Mi memory of 512Mi (empty dataset).
+
+### Plan
+
+1. Measure under real load, not idle: `kubectl top pod -A --containers`, or `%CPU/R` and `%MEM/R` in k9s.
+2. CPU: lower the request toward real usage plus headroom. With no CPU limit the pod still bursts when the node has idle CPU. Under contention it only gets its request's share.
+3. Memory: keep request = limit, sized to what the app must hold. For valkey that's `maxmemory` plus overhead, so lowering one means lowering the other.
+4. Ephemeral storage: Autopilot adds a 1Gi request when none is set. Set a smaller one explicitly if the app writes little to its own filesystem.
+5. Autopilot enforces minimum requests and allowed CPU:memory ratios, and raises requests to fit (exact values unconfirmed). After a deploy, the `autopilot.gke.io/resource-adjustment` annotation shows what it changed.
+
 ## Other defaults
 
 Locked by Autopilot, no direct cost: Dataplane V2, Workload Identity, Shielded Nodes, VPA, NodeLocal DNSCache, Cloud DNS, image streaming, CSI drivers (pay only for volumes).
