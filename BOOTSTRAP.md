@@ -117,7 +117,8 @@ Two roots, split by lifetime, each with its own state prefix in the bucket:
 tofu -chdir=infra/static init && tofu -chdir=infra/static apply     # once
 tofu -chdir=infra/dynamic init && tofu -chdir=infra/dynamic apply   # each session
 gcloud container clusters get-credentials lab --location=asia-south1 --dns-endpoint
-kapp delete -a valkey                                               # end of each session: apps with disks first
+k8s/deploy.sh valkey                                                # each session: apps
+k8s/destroy.sh valkey                                               # end of each session: apps with disks first
 kubectl get pv                                                      # wait until empty
 tofu -chdir=infra/dynamic destroy                                   # end of each session
 ```
