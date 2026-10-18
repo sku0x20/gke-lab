@@ -104,7 +104,8 @@ spec:
         name: data
       spec:
         accessModes: ["ReadWriteOnce"]
-        # GKE's default: balanced persistent disk
+        # GKE's default: balanced persistent disk, reclaimPolicy: Delete
+        # (GKE manages it; reclaimPolicy is a StorageClass field, not a PVC one)
         storageClassName: standard-rwo
         resources:
           requests:
