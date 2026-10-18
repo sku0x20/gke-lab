@@ -1,0 +1,26 @@
+# upstream Deployment sets neither securityContext nor resources
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: percona-server-mongodb-operator
+spec:
+  template:
+    spec:
+      # restricted Pod Security; image runs as numeric USER 2, so runAsNonRoot passes
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: percona-server-mongodb-operator
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          # Autopilot bills requests; without them it injects 500m CPU / 2Gi
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 256Mi

@@ -12,3 +12,9 @@ resources:
   - https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.23.1/deploy/crd.yaml
   - https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.23.1/deploy/rbac.yaml
   - https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.23.1/deploy/operator.yaml
+
+patches:
+  - path: crds.patch.yaml
+    target:
+      kind: CustomResourceDefinition
+  - path: operator.patch.yaml
