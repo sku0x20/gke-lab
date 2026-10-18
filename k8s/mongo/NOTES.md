@@ -41,11 +41,7 @@ A replica set needs `rs.initiate()`, a keyfile, member add/remove, users, TLS, a
 
 ## Dev access
 
-Network access (who reaches what) and database access (what they can do, audit) are separate layers. Devs get no `kubectl`.
-
-- Now: Cloudflare Zero Trust (`cloudflared` in the cluster, WARP + Access policies per user and host). Replset discovery needs `cluster.local` DNS on the laptop; unverified.
-- GCP-native alternative: IAP TCP forwarding with destination groups (IAM per group). One local port per host, so awkward for a replset.
-- Self-hosted later: OpenZiti.
+See `../DEV-ACCESS.md`. Mongo's part: devs log in with their own `spec.users` user, never the system users, and the replica set needs member-name DNS through the tunnel.
 
 ## Data lifetime
 
