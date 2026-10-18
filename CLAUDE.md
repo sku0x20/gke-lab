@@ -1,4 +1,4 @@
-# k8s-config
+# gke-lab
 
 ## Workflow
 
