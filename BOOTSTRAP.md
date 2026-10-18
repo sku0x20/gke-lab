@@ -116,8 +116,11 @@ Two roots, split by lifetime, each with its own state prefix in the bucket:
 ```sh
 tofu -chdir=infra/static init && tofu -chdir=infra/static apply     # once
 tofu -chdir=infra/dynamic init && tofu -chdir=infra/dynamic apply   # each session
+gcloud container clusters get-credentials lab --location=asia-south1 --dns-endpoint
 tofu -chdir=infra/dynamic destroy                                   # end of each session
 ```
+
+`get-credentials` writes the cluster into `KUBECONFIG` (repo-local `.config/kube/config`). The cluster has only a DNS endpoint, so `--dns-endpoint` is required. Each new cluster gets a new endpoint, so rerun it after every dynamic apply.
 
 Dynamic finds static's resources by name (data sources), so its plan fails if static isn't applied.
 
