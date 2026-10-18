@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# namespaced operator: watches only its own namespace, so the mongo app
+# (the PerconaServerMongoDB resource) deploys into this same namespace
+namespace: mongo
+
+resources:
+  - namespace.yaml
+  # upstream manifests, pinned to a release tag; upgrade = bump the tag.
+  # crd.yaml is ~1.6 MB, kept out of the repo
+  - https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.23.1/deploy/crd.yaml
+  - https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.23.1/deploy/rbac.yaml
+  - https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.23.1/deploy/operator.yaml
