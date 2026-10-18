@@ -58,6 +58,29 @@ spec:
       env:
         - name: HOME
           value: /
+      # merged into mongod.conf; a change rolls the pods (SmartUpdate)
+      configuration: |
+        # Percona Server feature (not in MongoDB Community). console = stdout,
+        # so audit events reach Cloud Logging next to mongod's own log lines
+        auditLog:
+          destination: console
+          # logged: DDL, user/role and replset changes; every failure; logins and
+          # writes by anyone but the system users (operator, probes, PBM, members).
+          # not logged: reads, and per-connection clientMetadata/logout events
+          filter: >-
+            { "$or": [
+              { "atype": { "$nin": ["authenticate", "authCheck", "clientMetadata", "logout"] } },
+              { "result": { "$ne": 0 } },
+              { "atype": "authenticate",
+                "param.user": { "$nin": ["clusterAdmin", "clusterMonitor", "userAdmin", "backup", "__system"] } },
+              { "atype": "authCheck",
+                "param.command": { "$in": ["insert", "update", "delete", "findAndModify"] },
+                "users.user": { "$nin": ["clusterAdmin", "clusterMonitor", "userAdmin", "backup", "__system"] } }
+            ] }
+        setParameter:
+          # authCheck successes (CRUD) are only audited with this on; the filter
+          # above keeps just writes. Percona warns it costs performance
+          auditAuthorizationSuccess: true
       # Autopilot bills requests: 3 x 500m / 1Gi. 500m is Autopilot's minimum
       # for pods with anti-affinity; lower and GKE Warden rejects the StatefulSet
       resources:
