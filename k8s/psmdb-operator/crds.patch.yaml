@@ -9,3 +9,8 @@ metadata:
   name: all-crds
   annotations:
     kapp.k14s.io/disable-original: ""
+# the API server's default; upstream omits it, and without an original
+# kapp would show it as a removal on every deploy
+spec:
+  conversion:
+    strategy: None
