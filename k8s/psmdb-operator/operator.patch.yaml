@@ -17,6 +17,12 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+          # periodic re-check of state Kubernetes sends no events for (primary,
+          # member health, users); upstream 5s. Kubernetes changes still trigger
+          # a reconcile immediately
+          env:
+            - name: RECONCILE_INTERVAL
+              value: 30s
           # Autopilot bills requests; without them it injects 500m CPU / 2Gi
           resources:
             requests:
