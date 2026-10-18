@@ -93,6 +93,11 @@ spec:
             readOnly: true
             volumeAttributes:
               secretProviderClass: valkey-acl
+  # data lives for one session (NOTES.md): deleting the StatefulSet deletes its PVCs,
+  # and standard-rwo then deletes the disk. scaling down keeps them
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Retain
   # one PVC per pod (data-valkey-0); can't be changed after creation
   volumeClaimTemplates:
     - metadata:
