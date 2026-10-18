@@ -28,39 +28,7 @@ Paid packages cost $0.06 per million samples. One series scraped every 30s is ab
 
 `SYSTEM_COMPONENTS` is required. `WORKLOADS` (container stdout/stderr) is optional. Ingestion is about $0.50/GiB after roughly 50 GiB/month free, kept 30 days (unconfirmed). Only worth cutting if an app logs heavily.
 
-### mongod connection noise
-
-mongod logs every connection: TLS handshake, auth, disconnect. The probes (exec healthcheck, every few seconds) and the operator (reconciles every 5s) open new connections all the time. Measured on the idle 3-member replica set: ~1,800 lines/min, ~25 MB/hour, ~20 GB/month if left up 24/7. The top messages:
-
-| Lines/min, rs0-0 | `jsonPayload.msg` |
-|---|---|
-| 165 | `Ingress TLS handshake complete` |
-| 165 | `Client connecting with server's own TLS certificate` |
-| 110 | `Connection not authenticating` |
-| 55 each | `Auth metrics report`, `Successfully authenticated`, `Received first command on ingress connection since session start or auth handshake`, `Interrupted operation as its client disconnected` |
-
-Drop them at ingestion with a project exclusion: never billed, and `kubectl logs` still shows everything. It's project-level, not tied to the cluster, so it goes in `infra/static`:
-
-```hcl
-# mongod per-connection lines from probes and the operator; excluded logs are not billed
-resource "google_logging_project_exclusion" "mongod_connection_noise" {
-  name   = "mongod-connection-noise"
-  filter = <<-EOT
-    resource.type="k8s_container"
-    resource.labels.namespace_name="mongo"
-    resource.labels.container_name="mongod"
-    jsonPayload.msg=("Ingress TLS handshake complete" OR
-      "Client connecting with server's own TLS certificate" OR
-      "Connection not authenticating" OR
-      "Auth metrics report" OR
-      "Successfully authenticated" OR
-      "Received first command on ingress connection since session start or auth handshake" OR
-      "Interrupted operation as its client disconnected")
-  EOT
-}
-```
-
-Match on `msg`, not on the component (`jsonPayload.c="ACCESS"`): that would also drop `Failed to authenticate`, which is the line worth keeping. Before applying, paste the filter into Logs Explorer (Logging → Logs Explorer) and check it matches only these lines; GKE parsing mongod's JSON into `jsonPayload` is unconfirmed.
+Log exclusions (`google_logging_project_exclusion`, in tofu) drop matching lines at ingestion, so they're never billed; `kubectl logs` still shows them. Helpful for mongo: mongod logs every connection the probes and the operator open, ~1,800 lines/min on an idle replica set. Match exact messages, not the whole component, so `Failed to authenticate` survives.
 
 ### Plan
 
