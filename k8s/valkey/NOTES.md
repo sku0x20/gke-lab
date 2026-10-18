@@ -31,6 +31,14 @@ Disk snapshots only, no logical backups; we don't keep in-memory store data long
 - Restore: new PVC from the snapshot, Valkey replays the AOF on boot.
 - GCE snapshots are multi-regional by default, so they survive losing the disk's zone.
 
+## Data lifetime
+
+The cluster is destroyed each session, so data lives for one session: every session starts empty.
+
+- Deleting the StatefulSet deletes its PVC (`persistentVolumeClaimRetentionPolicy`), and the PVC takes its disk with it (`reclaimPolicy: Delete`).
+- Destroying the cluster does not delete PVC disks. Delete the app first (BOOTSTRAP step 6), or the disk is left behind, still billed.
+- Data that must outlive a session: create the disk in `infra/static` and bind it with a pre-made PV (`Retain`, `claimRef` to `valkey/data-valkey-0`).
+
 ## Per app or shared
 
 One instance per app or service once an app needs its own. Sharing hurts: commands run one at a time (a slow command blocks everyone), and eviction policy and persistence are instance-wide (cache wants `allkeys-lru`, queues and sessions want `noeviction`). An extra instance costs a few MB.
