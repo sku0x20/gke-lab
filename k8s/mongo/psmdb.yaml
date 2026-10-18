@@ -51,10 +51,11 @@ spec:
           drop: ["ALL"]
         # operator 1.23+ mounts an emptyDir at /tmp when this is set
         readOnlyRootFilesystem: true
-      # Autopilot bills requests: 3 x 300m / 1Gi
+      # Autopilot bills requests: 3 x 500m / 1Gi. 500m is Autopilot's minimum
+      # for pods with anti-affinity; lower and GKE Warden rejects the StatefulSet
       resources:
         requests:
-          cpu: 300m
+          cpu: 500m
           memory: 1Gi
         limits:
           memory: 1Gi # WiredTiger cache is sized from this
