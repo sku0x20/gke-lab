@@ -49,8 +49,10 @@ spec:
         allowPrivilegeEscalation: false
         capabilities:
           drop: ["ALL"]
-        # operator 1.23+ mounts an emptyDir at /tmp when this is set
-        readOnlyRootFilesystem: true
+        # no readOnlyRootFilesystem: mongosh then can't create ~/.mongodb and
+        # prints a warning to stdout; the operator's primary check compares
+        # stdout to "true", never passes, and system users are never created
+        # (operator 1.23.1)
       # Autopilot bills requests: 3 x 500m / 1Gi. 500m is Autopilot's minimum
       # for pods with anti-affinity; lower and GKE Warden rejects the StatefulSet
       resources:
