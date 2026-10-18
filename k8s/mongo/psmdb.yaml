@@ -49,10 +49,15 @@ spec:
         allowPrivilegeEscalation: false
         capabilities:
           drop: ["ALL"]
-        # no readOnlyRootFilesystem: mongosh then can't create ~/.mongodb and
-        # prints a warning to stdout; the operator's primary check compares
-        # stdout to "true", never passes, and system users are never created
-        # (operator 1.23.1)
+        # operator 1.23+ mounts an emptyDir at /tmp when this is set
+        readOnlyRootFilesystem: true
+      # mongosh writes to $HOME/.mongodb; the operator mounts a writable volume
+      # at /.mongodb, but uid 1001's HOME is /home/mongodb (read-only). Without
+      # this, mongosh warns on stdout, the operator's primary check fails, and
+      # the replset never initializes (upstream #2594, K8SPSMDB-1853)
+      env:
+        - name: HOME
+          value: /
       # Autopilot bills requests: 3 x 500m / 1Gi. 500m is Autopilot's minimum
       # for pods with anti-affinity; lower and GKE Warden rejects the StatefulSet
       resources:
