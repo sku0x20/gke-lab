@@ -14,7 +14,7 @@ Things seen on the live cluster that we'd have to handle ourselves later:
 
 - **Nodes.** GKE picks the machine type (`ek-standard-8`), count and zones. Ours got 2 nodes in different zones, both created within a minute of the first valkey deploy. Likely reason for the second: system pods (kube-dns, konnectivity-agent) run 2 replicas spread across nodes. Unconfirmed.
 - **Spare capacity.** Each node runs a `gke-system-balloon-pod` that requests the node's unused CPU and memory. GKE uses it to hold that capacity, and it makes way when real pods need room. Nodes look 99% full because of it.
-- **Resource defaults.** A webhook rewrites pod specs: it sets limits = requests and adds `ephemeral-storage: 1Gi` when it's missing. The running pod and the manifest differ.
+- **Resource defaults.** A webhook rewrites pod specs: it adds `ephemeral-storage: 1Gi` (request and limit) when it's missing. CPU stays without a limit, so pods can burst into idle node CPU. The running pod and the manifest differ.
 - **Billing.** Per pod request, not per node. System pods and balloon pods are free.
 - **System pods.** Dataplane V2 (`anetd`, Cilium-based), `netd`, `ip-masq-agent`, `node-local-dns`, `gke-metadata-server` (Workload Identity), CSI node drivers (PD, Filestore, GCS FUSE, Secrets Store), log and metrics agents, kube-dns, metrics-server.
 

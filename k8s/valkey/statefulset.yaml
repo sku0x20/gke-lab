@@ -45,7 +45,8 @@ spec:
               drop: ["ALL"]
             # Valkey only writes to /data
             readOnlyRootFilesystem: true
-          # Autopilot sets limits = requests; maxmemory in valkey.conf is half the memory
+          # no CPU limit: Autopilot lets it burst into idle node CPU (QoS Burstable).
+          # memory limit = request; maxmemory in valkey.conf is half of it
           resources:
             requests:
               cpu: 250m
