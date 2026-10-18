@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# namespace and operator come from the psmdb-operator app (deploy it first)
+namespace: mongo
+
+resources:
+  - psmdb.yaml

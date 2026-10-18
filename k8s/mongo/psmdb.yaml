@@ -1,0 +1,72 @@
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: mongo # pods: mongo-rs0-0..2
+  # run by the operator on delete, so destroy this app before psmdb-operator
+  finalizers:
+    - percona.com/delete-psmdb-pods-in-order # secondaries first, primary last
+    # data lives one session: also deletes StatefulSets, PVCs and the
+    # operator-generated secrets (users, keyfile, TLS, encryption key)
+    - percona.com/delete-psmdb-pvc
+spec:
+  crVersion: 1.23.1 # must match the operator version
+  image: percona/percona-server-mongodb:8.0.32-14
+  # no version-service lookups or automatic upgrades
+  upgradeOptions:
+    apply: disabled
+
+  secrets:
+    # system users (clusterAdmin, userAdmin, ...); operator generates it if missing
+    users: mongo-users
+
+  # mongo-init copies the entrypoint into each pod; restricted needs these per container
+  initContainerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+  replsets:
+    - name: rs0
+      size: 3
+      # one member per node (the default; Autopilot adds nodes as needed)
+      affinity:
+        antiAffinityTopologyKey: kubernetes.io/hostname
+      # setting these replaces the operator's defaults (fsGroup/runAsUser 1001),
+      # so they are repeated here
+      podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001 # makes the data volume writable
+        seccompProfile:
+          type: RuntimeDefault
+      containerSecurityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        # operator 1.23+ mounts an emptyDir at /tmp when this is set
+        readOnlyRootFilesystem: true
+      # Autopilot bills requests: 3 x 300m / 1Gi
+      resources:
+        requests:
+          cpu: 300m
+          memory: 1Gi
+        limits:
+          memory: 1Gi # WiredTiger cache is sized from this
+      volumeSpec:
+        persistentVolumeClaim:
+          # GKE's default: balanced persistent disk, reclaimPolicy: Delete
+          storageClassName: standard-rwo
+          resources:
+            requests:
+              storage: 10Gi
+
+  # plain replica set; upstream example enables sharding
+  sharding:
+    enabled: false
+
+  # left out on purpose, each is off when omitted (the CRD wants an image
+  # even with enabled: false):
+  #   backup: PBM to GCS comes as its own step
+  #   logcollector: mongod logs go to stdout (kubectl logs); saves 200m CPU per pod
+  #   pmm: no monitoring server
