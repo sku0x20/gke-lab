@@ -4,7 +4,7 @@ Used by the backup-copy CronJobs (backup-copy.yaml):
   daily:   mongo/      -> mongo-full/     (newest 90 kept)
   monthly: mongo-full/ -> mongo-monthly/  (kept forever)
 Idempotent: an already copied base is skipped. With KEEP set, copies beyond the newest KEEP
-in DST are deleted after each run.
+in DST are deleted after each run. Incomplete copies (data without metadata) are deleted too.
 """
 
 import json
@@ -36,6 +36,14 @@ def backups(prefix):
     return sorted(names, reverse=True)
 
 
+def folders(prefix):
+    # top-level backup folders; gcloud prints them with a trailing /
+    urls = gcloud("ls", f"{prefix}/", check=False).stdout.split()
+    # not the prefix itself (listed when a console-made folder object exists)
+    return [u.rstrip("/").rsplit("/", 1)[1] for u in urls
+            if u.endswith("/") and u != f"{prefix}/"]
+
+
 for name in backups(SRC):
     if is_finished_base(json.loads(gcloud("cat", f"{SRC}/{name}.pbm.json").stdout)):
         break
@@ -56,3 +64,11 @@ if KEEP:
         gcloud("rm", f"{DST}/{old}.pbm.json")
         gcloud("rm", "-r", f"{DST}/{old}")
         print(f"deleted {old}")
+
+# data without metadata is left by a failed copy or delete. Skip this run's base: a manual
+# run may overlap a scheduled one (the CronJob's Forbid doesn't cover manual jobs)
+complete = set(backups(DST))
+for folder in folders(DST):
+    if folder not in complete and folder != name:
+        gcloud("rm", "-r", f"{DST}/{folder}")
+        print(f"deleted incomplete {folder}")
