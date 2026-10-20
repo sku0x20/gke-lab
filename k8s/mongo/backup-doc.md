@@ -64,3 +64,36 @@ kubectl -n mongo get psmdb-backup -w             # ready = survives restarts; er
 ```
 
 Either way, the base every deploy takes restarts the chain after a rollout.
+
+# PITR
+
+PITR doesn't use the change map. It uses the oplog: every write as an operation ("insert this doc"). Secondaries copy and replay it, so all 3 members hold the same oplog. Blocks differ per member; the oplog doesn't.
+
+## Slicing
+
+- PBM picks one agent in the replset to slice; any member works.
+- Every 10 min (`oplogSpanMin`) it uploads the new oplog entries to GCS as one slice, e.g. 10:00 → 10:10.
+- If that agent dies, another continues from the last uploaded timestamp.
+- Result: one continuous timeline in GCS, not tied to any node.
+
+```
+backups:   base X ── inc 1 ── inc 2 ──✗ (chain broken)
+oplog:     |10:00|10:10|10:20|10:30|10:40|10:50|11:00| ...   ← unaffected
+```
+
+## Restore to time T
+
+1. PBM picks the newest backup (base or incremental) that finished before T.
+2. Restores its files.
+3. Replays the slices from that backup's end up to T.
+
+With the chain broken after `inc 2`, a restore to 11:00 uses `inc 2` and replays everything since. Same data, more replay, so slower.
+
+## What breaks it
+
+- No backup to replay onto: the base every deploy takes covers a new cluster.
+- A gap: the oplog is fixed-size, and old entries roll off. If no agent uploads for longer than the oplog holds, those entries are gone. `pbm status` shows the gap; times inside it can't be restored. The next backup starts a new timeline.
+- After a restore: history after that point is rewritten, and later slices no longer apply. Deploy again for a new base.
+- Expiry: slices fall under the bucket's 90-day lifecycle rule too.
+
+Here at most ~10 min of writes are lost, the slice not yet uploaded. At teardown everything up to ~10 min before the destroy is already in GCS.
