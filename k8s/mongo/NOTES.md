@@ -58,10 +58,22 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   - hourly `incremental` (changes since the previous backup in the chain)
   - PITR: oplog slices every 10 min, so at most ~10 min of writes are lost.
   - PBM has no differential backups.
-- Schedules only fire while the cluster is up, and a new cluster has no chain. So after every deploy or restore, take a base: `kubectl create -f k8s/mongo/backup-base.yaml`. Without it the incrementals fail and PITR has nothing to replay onto.
+- Schedules only fire while the cluster is up, and a new cluster has no chain. So after every deploy or restore, take a base. Without it the incrementals fail and PITR has nothing to replay onto:
+
+  ```sh
+  kubectl create -f k8s/mongo/backup-base.yaml
+  ```
 - The chain lives on the node that took the base. If that member is gone, the next incremental fails until a new base.
 - Never `percona.com/delete-backup`. Scheduled backups get it unless `retention.deleteFromStorage: false`, and per-session teardown would then delete the files in GCS (or hang namespace deletion: the operator's fallback storage client ignores Workload Identity). `retention.count` only trims the Kubernetes objects.
-- Teardown: `k8s/destroy.sh mongo`, then `kubectl -n mongo delete psmdb-backup --all`, then `k8s/destroy.sh psmdb-operator`. Every started backup carries the operator's `internal.percona.com/release-lock` finalizer, which only the operator removes. Left for the namespace deletion, they'd keep it Terminating once the operator is gone. Deleting them leaves the files in GCS.
+- Teardown, in this order:
+
+  ```sh
+  k8s/destroy.sh mongo
+  kubectl -n mongo delete psmdb-backup --all   # GCS files stay
+  k8s/destroy.sh psmdb-operator
+  ```
+
+  Every started backup carries the operator's `internal.percona.com/release-lock` finalizer, which only the operator removes. Left for the namespace deletion, they'd keep it Terminating once the operator is gone.
 - Restore into a new session uses `backupSource` (a GCS path), since the backup objects are gone. A physical restore stops the whole replset.
 - Not yet restorable across sessions: a physical restore needs the same encryption key (`mongo-mongodb-encryption-key`), and backups include the system users (`mongo-system-users`). Both are generated per session today. Next step: keep them in Secret Manager.
 
