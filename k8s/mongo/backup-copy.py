@@ -1,7 +1,7 @@
 """Copy the newest finished PBM base backup from SRC to DST (GCS-side copy, no load on mongod).
 
 Used by the backup-copy CronJobs (backup-copy.yaml):
-  daily:   mongo/      -> mongo-full/     (kept 30 days)
+  daily:   mongo/      -> mongo-full/     (kept 90 days)
   monthly: mongo-full/ -> mongo-monthly/  (kept forever)
 Idempotent: an already copied base is skipped.
 """

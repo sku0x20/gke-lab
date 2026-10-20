@@ -1,5 +1,5 @@
 # Long-term fulls, copied by backup-copy.py (a GCS-side copy, no load on mongod):
-#   backup-copy          daily    mongo/      -> mongo-full/     kept 30 days
+#   backup-copy          daily    mongo/      -> mongo-full/     kept 90 days
 #   backup-copy-monthly  1st      mongo-full/ -> mongo-monthly/  kept forever
 # Why copies: PBM's cleanup deletes whole chains at 7 days, and a second PBM storage would take
 # another full backup from mongod. A base is a complete physical backup on its own.

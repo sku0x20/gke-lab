@@ -51,12 +51,12 @@ Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and t
 
 PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data files from the shared volume and streams them, compressed, straight to GCS. Nothing is staged on disk.
 
-- Bucket `lab-gke-2610-mongo-backup` in `infra/static`, prefix `mongo`. Rotation: an hourly CronJob (`backup-cleanup.yaml`) execs into a backup-agent and runs PBM's own cleanup: PITR slices 48h, backups 7d. PBM never deletes part of a chain or the slices a kept backup needs, so it keeps at least that much. Neither PBM nor the operator schedules it. It only runs while the cluster is up; the first run of a session catches up. The bucket's 90-day lifecycle rule (plus 7 days of soft delete) is a backstop. Run it now:
+- Bucket `lab-gke-2610-mongo-backup` in `infra/static`, prefix `mongo`. Rotation: an hourly CronJob (`backup-cleanup.yaml`) execs into a backup-agent and runs PBM's own cleanup: PITR slices 48h, backups 7d. PBM never deletes part of a chain or the slices a kept backup needs, so it keeps at least that much. Neither PBM nor the operator schedules it. It only runs while the cluster is up; the first run of a session catches up. No lifecycle rule on `mongo/`: PBM's cleanup is the only rotation there. Run it now:
 
   ```sh
   kubectl -n mongo create job --from=cronjob/backup-cleanup backup-cleanup-now
   ```
-- Fulls for 30 days: PBM can only delete whole chains, so its 7-day cleanup takes each day's base with it. A second PBM storage would take a second full from mongod (more disk/network load on a member, holds PBM's one-operation lock, grows with data size). Instead a daily CronJob (`backup-copy.yaml`, 02:00 UTC) copies the newest finished base to `mongo-full/`: a GCS-side copy, no load on mongod. A base is a complete physical backup on its own; its `.pbm.json` has `type: incremental`, no `src_backup`, `status: done`. The bucket deletes `mongo-full/` at 30 days. Must stay outside `mongo/`: PBM lists its prefix recursively, so copies there would be imported and cleaned at 7 days. Run it now:
+- Fulls for 90 days: PBM can only delete whole chains, so its 7-day cleanup takes each day's base with it. A second PBM storage would take a second full from mongod (more disk/network load on a member, holds PBM's one-operation lock, grows with data size). Instead a daily CronJob (`backup-copy.yaml`, 02:00 UTC) copies the newest finished base to `mongo-full/`: a GCS-side copy, no load on mongod. A base is a complete physical backup on its own; its `.pbm.json` has `type: incremental`, no `src_backup`, `status: done`. The bucket deletes `mongo-full/` at 90 days; one copy a day keeps it at ~90 (GCS lifecycle can't cap a count). Must stay outside `mongo/`: PBM lists its prefix recursively, so copies there would be imported and cleaned at 7 days. Run it now:
 
   ```sh
   kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now

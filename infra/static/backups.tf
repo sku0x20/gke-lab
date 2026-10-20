@@ -9,23 +9,12 @@ resource "google_storage_bucket" "mongo_backup" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  # fulls copied by k8s/mongo/backup-copy.yaml: kept 30 days (outside PBM's prefix, PBM never cleans them)
-  lifecycle_rule {
-    condition {
-      age            = 30
-      matches_prefix = ["mongo-full/"]
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  # backstop only: PBM's cleanup (k8s/mongo/backup-cleanup.yaml) keeps 48h PITR / 7d backups,
-  # but only runs while the cluster is up
+  # fulls copied daily by k8s/mongo/backup-copy.yaml, so ~90 at most. mongo/ (PBM's own
+  # cleanup) and mongo-monthly/ (kept forever) get no rule
   lifecycle_rule {
     condition {
       age            = 90
-      matches_prefix = ["mongo/"] # not mongo-full/ or mongo-monthly/ (kept forever)
+      matches_prefix = ["mongo-full/"]
     }
     action {
       type = "Delete"
