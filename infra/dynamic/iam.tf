@@ -13,3 +13,11 @@ resource "google_secret_manager_secret_iam_member" "valkey_acl" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "${local.k8s_principal}/ns/valkey/sa/valkey"
 }
+
+# PBM agents (sidecar in the mongod pods, KSA mongo in ns mongo) read and write backups.
+# objectUser: PBM only makes object calls (put, get, list, delete), never bucket ones
+resource "google_storage_bucket_iam_member" "mongo_backup" {
+  bucket = data.google_storage_bucket.mongo_backup.name
+  role   = "roles/storage.objectUser"
+  member = "${local.k8s_principal}/ns/mongo/sa/mongo"
+}

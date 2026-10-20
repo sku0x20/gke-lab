@@ -16,3 +16,7 @@ data "google_service_account" "gke_nodes" {
 data "google_secret_manager_secret" "valkey_acl" {
   secret_id = "valkey-acl"
 }
+
+data "google_storage_bucket" "mongo_backup" {
+  name = "${data.google_project.this.project_id}-mongo-backup"
+}
