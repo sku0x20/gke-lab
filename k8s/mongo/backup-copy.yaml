@@ -1,0 +1,82 @@
+# Keeps fulls for 30 days. PBM's cleanup deletes whole chains at 7 days, and a second PBM
+# storage would take another full backup from mongod. Instead, copy the newest finished base
+# (a complete physical backup on its own) to mongo-full/: a GCS-side copy, no load on mongod.
+# mongo-full/ is outside PBM's prefix, so PBM never sees or cleans it; the bucket's lifecycle
+# rule deletes it at 30 days. Idempotent: an already copied base is skipped. Run it now with:
+#   kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-copy
+spec:
+  schedule: "0 2 * * *" # 2h after the daily base starts (00:00 UTC)
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          # same KSA as the agents: its Workload Identity already has the bucket
+          serviceAccountName: mongo
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000 # image's cloudsdk user
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: gcloud
+              image: gcr.io/google.com/cloudsdktool/google-cloud-cli:589.0.0-slim
+              command: ["bash", "-euo", "pipefail", "-c"]
+              args:
+                - |
+                  src=gs://lab-gke-2610-mongo-backup/mongo
+                  dst=gs://lab-gke-2610-mongo-backup/mongo-full
+
+                  # newest first (backup names are timestamps); a base is
+                  # type incremental with no src_backup
+                  name=
+                  for meta in $(gcloud storage ls "$src/*.pbm.json" | sort -r); do
+                    if gcloud storage cat "$meta" | python3 -c '
+                  import json, sys
+                  m = json.load(sys.stdin)
+                  base = m["type"] == "incremental" and not m.get("src_backup")
+                  sys.exit(0 if base and m["status"] == "done" else 1)'; then
+                      name=$(basename "$meta" .pbm.json)
+                      break
+                    fi
+                  done
+                  if [ -z "$name" ]; then echo "no finished base"; exit 1; fi
+
+                  if gcloud storage ls "$dst/$name.pbm.json" >/dev/null 2>&1; then
+                    echo "$name already copied"; exit 0
+                  fi
+                  gcloud storage cp -r "$src/$name" "$dst/"
+                  # metadata last: its presence marks a complete copy
+                  gcloud storage cp "$src/$name.pbm.json" "$dst/"
+                  echo "copied $name"
+              env:
+                - name: CLOUDSDK_CONFIG # gcloud writes its config here; root is read-only
+                  value: /tmp/gcloud
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi

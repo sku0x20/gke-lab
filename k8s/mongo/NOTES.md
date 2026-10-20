@@ -56,6 +56,20 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   ```sh
   kubectl -n mongo create job --from=cronjob/backup-cleanup backup-cleanup-now
   ```
+- Fulls for 30 days: PBM can only delete whole chains, so its 7-day cleanup takes each day's base with it. A second PBM storage would take a second full from mongod (more disk/network load on a member, holds PBM's one-operation lock, grows with data size). Instead a daily CronJob (`backup-copy.yaml`, 02:00 UTC) copies the newest finished base to `mongo-full/`: a GCS-side copy, no load on mongod. A base is a complete physical backup on its own; its `.pbm.json` has `type: incremental`, no `src_backup`, `status: done`. The bucket deletes `mongo-full/` at 30 days. Must stay outside `mongo/`: PBM lists its prefix recursively, so copies there would be imported and cleaned at 7 days. Run it now:
+
+  ```sh
+  kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
+  ```
+
+  Restore from a copy: copy `<name>/` and then `<name>.pbm.json` back into `mongo/`, resync, restore by name:
+
+  ```sh
+  gcloud storage cp -r gs://lab-gke-2610-mongo-backup/mongo-full/<name> gs://lab-gke-2610-mongo-backup/mongo/
+  gcloud storage cp gs://lab-gke-2610-mongo-backup/mongo-full/<name>.pbm.json gs://lab-gke-2610-mongo-backup/mongo/
+  kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm config --force-resync
+  ```
+- Later, for disaster recovery: today every copy is in one bucket, and the agents can delete all of it. Move the 30-day copies to a separate bucket (another region, ideally another project) with a 30-day retention lock, written by a create-only identity running outside the cluster.
 - No keys: without `credentialsSecret`, PBM uses Workload Identity. The pods run as KSA `mongo`, which has `roles/storage.objectUser` on the bucket (`infra/dynamic/iam.tf`).
 - Strategy:
   - daily `incremental-base` (full physical) at 00:00 UTC
