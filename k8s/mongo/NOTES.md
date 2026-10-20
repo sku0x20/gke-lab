@@ -70,7 +70,7 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   - `kapp-config.yaml` wait rules: the cluster is done when the operator has seen the new spec (`observedGeneration`), `state` is `ready`, and no `pendingSmartUpdate` is left. Without that wait, the backup would start while a rollout is pending and run first, because a smart update waits for running backups.
   - `deploy.sh mongo` now blocks until the cluster is ready and the base is done. A failed base fails the deploy.
 - Restarts outside a deploy (node upgrades, evictions) aren't covered; the daily base catches them.
-- The chain lives on the node that took the base. If that member is gone, the next incremental fails until a new base.
+- The chain lives on the node that took the base. If that member is gone, the next incremental fails until a new base. Why, and the open restart question: `backup-doc.md`.
 - Never `percona.com/delete-backup`. Scheduled backups get it unless `retention.deleteFromStorage: false`, and per-session teardown would then delete the files in GCS (or hang namespace deletion: the operator's fallback storage client ignores Workload Identity). `retention.count` only trims the Kubernetes objects.
 - Teardown, in this order:
 
