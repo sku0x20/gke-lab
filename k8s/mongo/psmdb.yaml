@@ -80,8 +80,61 @@ spec:
   sharding:
     enabled: false
 
+  # PBM: a backup-agent sidecar in every mongod pod streams backups straight to
+  # GCS (nothing staged on disk), as KSA mongo via Workload Identity
+  backup:
+    enabled: true
+    image: percona/percona-backup-mongodb:2.15.0 # paired with operator 1.23.1
+    # Autopilot bills every container's requests: 3 x 100m / 256Mi on top of mongod
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi # headroom for compression and upload buffers during a backup
+    # setting this replaces the operator's default; runAsNonRoot etc. come from the pod
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop: ["ALL"]
+      readOnlyRootFilesystem: true # operator mounts an emptyDir at /tmp (pbm-entry.sh writes tls.pem there)
+    storages:
+      gcs:
+        type: gcs
+        gcs:
+          bucket: lab-gke-2610-mongo-backup # infra/static
+          prefix: mongo
+          # no credentialsSecret: PBM falls back to Workload Identity (no keys)
+    # oplog slices every 10 min: restore to any second since the newest base.
+    # needs a base backup first; starts slicing once one exists
+    pitr:
+      enabled: true
+      oplogSpanMin: 10
+    # schedules (UTC) only fire while the cluster is up; a fresh cluster needs an
+    # on-demand base first (backup-base.yaml), or the incrementals have nothing to chain to.
+    # deleteFromStorage: false on every task: teardown deletes the backup objects, and
+    # that must never delete files in GCS. The bucket's lifecycle rule expires them
+    tasks:
+      - name: daily-base
+        enabled: true
+        schedule: "0 0 * * *"
+        type: incremental-base # full physical, starts a new incremental chain
+        storageName: gcs
+        retention:
+          type: count
+          count: 2 # Kubernetes objects kept, not files in GCS
+          deleteFromStorage: false
+      - name: hourly-incremental
+        enabled: true
+        schedule: "0 1-23 * * *" # skips 00:00, when the base runs (one backup at a time)
+        type: incremental # changes since the previous backup in the chain
+        storageName: gcs
+        retention:
+          type: count
+          count: 24 # ignored by the operator for incrementals; required to set deleteFromStorage
+          deleteFromStorage: false
+
   # left out on purpose, each is off when omitted (the CRD wants an image
   # even with enabled: false):
-  #   backup: PBM to GCS comes as its own step
   #   logcollector: mongod logs go to stdout (kubectl logs); saves 200m CPU per pod
   #   pmm: no monitoring server

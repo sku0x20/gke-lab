@@ -1,0 +1,13 @@
+# On-demand full physical backup that starts an incremental chain and gives PITR a base.
+# Run once after every deploy or restore (not part of the kapp app, so teardown leaves it alone):
+#   kubectl create -f k8s/mongo/backup-base.yaml
+# no percona.com/delete-backup finalizer: deleting this object must not delete the files in GCS
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBBackup
+metadata:
+  generateName: base- # create, not apply: a new name every run
+  namespace: mongo
+spec:
+  clusterName: mongo
+  storageName: gcs
+  type: incremental-base
