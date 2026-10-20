@@ -94,6 +94,6 @@ With the chain broken after `inc 2`, a restore to 11:00 uses `inc 2` and replays
 - No backup to replay onto: the base every deploy takes covers a new cluster.
 - A gap: the oplog is fixed-size, and old entries roll off. If no agent uploads for longer than the oplog holds, those entries are gone. `pbm status` shows the gap; times inside it can't be restored. The next backup starts a new timeline.
 - After a restore: history after that point is rewritten, and later slices no longer apply. Deploy again for a new base.
-- Expiry: slices fall under the bucket's 90-day lifecycle rule too.
+- Rotation: `backup-cleanup.yaml` deletes slices older than 48h (back to the nearest backup).
 
 Here at most ~10 min of writes are lost, the slice not yet uploaded. At teardown everything up to ~10 min before the destroy is already in GCS.

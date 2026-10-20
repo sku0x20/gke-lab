@@ -116,7 +116,7 @@ spec:
     # schedules (UTC) only fire while the cluster is up; a fresh cluster gets its first
     # base from the deploy (backup-base.yaml), or the incrementals have nothing to chain to.
     # deleteFromStorage: false on every task: teardown deletes the backup objects, and
-    # that must never delete files in GCS. The bucket's lifecycle rule expires them
+    # that must never delete files in GCS. Rotation: backup-cleanup.yaml
     tasks:
       - name: daily-base
         enabled: true

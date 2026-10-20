@@ -9,8 +9,8 @@ resource "google_storage_bucket" "mongo_backup" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  # retention lives here, not in PBM: backup tasks keep files on delete
-  # (deleteFromStorage: false), so per-session teardown can't wipe them
+  # backstop only: PBM's cleanup (k8s/mongo/backup-cleanup.yaml) keeps 48h PITR / 7d backups,
+  # but only runs while the cluster is up
   lifecycle_rule {
     condition {
       age = 90
