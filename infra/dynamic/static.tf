@@ -20,3 +20,16 @@ data "google_secret_manager_secret" "valkey_acl" {
 data "google_storage_bucket" "mongo_backup" {
   name = "${data.google_project.this.project_id}-mongo-backup"
 }
+
+# names as in infra/static/secrets.tf
+data "google_secret_manager_secret" "mongo" {
+  for_each = toset([
+    "mongo-encryption-key",
+    "mongo-backup-password",
+    "mongo-cluster-admin-password",
+    "mongo-cluster-monitor-password",
+    "mongo-user-admin-password",
+    "mongo-database-admin-password",
+  ])
+  secret_id = each.key
+}

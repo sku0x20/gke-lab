@@ -21,3 +21,11 @@ resource "google_storage_bucket_iam_member" "mongo_backup" {
   role   = "roles/storage.objectUser"
   member = "${local.k8s_principal}/ns/mongo/sa/mongo"
 }
+
+# Secret Sync reads mongo's secrets as KSA mongo (SecretSync spec.serviceAccountName)
+resource "google_secret_manager_secret_iam_member" "mongo" {
+  for_each  = data.google_secret_manager_secret.mongo
+  secret_id = each.value.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "${local.k8s_principal}/ns/mongo/sa/mongo"
+}

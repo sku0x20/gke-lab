@@ -38,6 +38,12 @@ resource "google_container_cluster" "lab" {
     enabled = true
   }
 
+  # Secret Sync: copies Secret Manager secrets into Kubernetes Secrets (SecretSync resources),
+  # for apps that only read Secrets, like the mongo operator. No rotation: synced once
+  secret_sync_config {
+    enabled = true
+  }
+
   # on Autopilot this only sets node defaults; GKE manages the autoscaling itself
   cluster_autoscaling {
     auto_provisioning_defaults {
