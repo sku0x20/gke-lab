@@ -33,6 +33,8 @@ spec:
   replsets:
     - name: rs0
       size: 3
+      # pods run as this KSA; its Workload Identity lets the backup-agent sidecar use the bucket
+      serviceAccountName: mongo
       # one member per node (the default; Autopilot adds nodes as needed)
       affinity:
         antiAffinityTopologyKey: kubernetes.io/hostname
