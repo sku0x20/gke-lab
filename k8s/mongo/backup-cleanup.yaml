@@ -1,10 +1,42 @@
 # Backup rotation: PITR slices kept 48h, backups 7d. Neither PBM nor the operator schedules this.
 # PBM's cleanup is chain- and PITR-aware: it keeps a whole chain if the cutoff falls inside it,
 # and keeps slices back to the nearest backup, so retention is "at least", never less.
-# This pod only queues the command in PBM's control collection; the agents delete the files
-# with their own Workload Identity, so no GCS access here.
+# Runs pbm inside a backup-agent container, which already has the connection and TLS cert.
 # Only runs while the cluster is up; the first run of a session catches up. Run it now with:
 #   kubectl -n mongo create job --from=cronjob/backup-cleanup backup-cleanup-now
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-cleanup
+---
+# exec into any pod in the namespace (mongod pods included): a shell there is full DB access
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-cleanup
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["get", "create"] # websocket exec checks both
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-cleanup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: backup-cleanup
+subjects:
+  - kind: ServiceAccount
+    name: backup-cleanup
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -20,38 +52,27 @@ spec:
       ttlSecondsAfterFinished: 3600
       template:
         spec:
+          serviceAccountName: backup-cleanup
           restartPolicy: Never
-          automountServiceAccountToken: false # never calls the Kubernetes API
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1001 # image's mongodb user
-            runAsGroup: 1001
+            runAsUser: 65532 # distroless nonroot
             seccompProfile:
               type: RuntimeDefault
           containers:
-            - name: pbm
-              image: percona/percona-backup-mongodb:2.15.0 # same as the agents
-              command: ["bash", "-ec"]
+            - name: kubectl
+              image: registry.k8s.io/kubectl:v1.36.4 # matches the server's minor
+              # sts/: kubectl picks a running pod, so one restarting member doesn't fail the run
               args:
+                - exec
+                - statefulset/mongo-rs0
+                - --container=backup-agent
+                - --
+                - bash
+                - -ec
                 - |
-                  # mongod requires a client certificate; same as the agent's pbm-entry.sh
-                  cat /etc/mongodb-ssl/tls.key /etc/mongodb-ssl/tls.crt > /tmp/tls.pem
                   pbm delete-pitr --older-than 2d -y --wait
                   pbm cleanup --older-than 7d -y --wait
-              env:
-                - name: PBM_MONGODB_USER
-                  valueFrom:
-                    secretKeyRef:
-                      name: internal-mongo-users # operator's copy, with URL-escaped values
-                      key: MONGODB_BACKUP_USER_ESCAPED
-                - name: PBM_MONGODB_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: internal-mongo-users
-                      key: MONGODB_BACKUP_PASSWORD_ESCAPED
-                # tlsInsecure: the operator's certs don't cover this client's name; the agents do the same
-                - name: PBM_MONGODB_URI
-                  value: "mongodb://$(PBM_MONGODB_USER):$(PBM_MONGODB_PASSWORD)@mongo-rs0.mongo.svc.cluster.local:27017/?replicaSet=rs0&tls=true&tlsCertificateKeyFile=/tmp/tls.pem&tlsCAFile=/etc/mongodb-ssl/ca.crt&tlsInsecure=true"
               resources:
                 requests:
                   cpu: 100m
@@ -63,17 +84,3 @@ spec:
                 capabilities:
                   drop: ["ALL"]
                 readOnlyRootFilesystem: true
-              volumeMounts:
-                - name: ssl
-                  mountPath: /etc/mongodb-ssl
-                  readOnly: true
-                - name: tmp
-                  mountPath: /tmp
-          volumes:
-            - name: ssl
-              secret:
-                secretName: mongo-ssl # operator-generated TLS for the replset
-            - name: tmp
-              emptyDir:
-                medium: Memory # holds the client key; never touches disk
-                sizeLimit: 1Mi

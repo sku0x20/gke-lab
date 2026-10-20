@@ -51,7 +51,7 @@ Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and t
 
 PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data files from the shared volume and streams them, compressed, straight to GCS. Nothing is staged on disk.
 
-- Bucket `lab-gke-2610-mongo-backup` in `infra/static`, prefix `mongo`. Rotation: an hourly CronJob (`backup-cleanup.yaml`) runs PBM's own cleanup: PITR slices 48h, backups 7d. PBM never deletes part of a chain or the slices a kept backup needs, so it keeps at least that much. Neither PBM nor the operator schedules it. It only runs while the cluster is up; the first run of a session catches up. The bucket's 90-day lifecycle rule (plus 7 days of soft delete) is a backstop. Run it now:
+- Bucket `lab-gke-2610-mongo-backup` in `infra/static`, prefix `mongo`. Rotation: an hourly CronJob (`backup-cleanup.yaml`) execs into a backup-agent and runs PBM's own cleanup: PITR slices 48h, backups 7d. PBM never deletes part of a chain or the slices a kept backup needs, so it keeps at least that much. Neither PBM nor the operator schedules it. It only runs while the cluster is up; the first run of a session catches up. The bucket's 90-day lifecycle rule (plus 7 days of soft delete) is a backstop. Run it now:
 
   ```sh
   kubectl -n mongo create job --from=cronjob/backup-cleanup backup-cleanup-now
