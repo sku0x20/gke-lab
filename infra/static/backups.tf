@@ -9,16 +9,5 @@ resource "google_storage_bucket" "mongo_backup" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  # fulls copied daily by k8s/mongo/backup-copy.yaml, which also keeps only the newest 90;
-  # this also removes data left by a failed delete there.
-  # mongo/ (PBM's own cleanup) and mongo-monthly/ (kept forever) get no rule
-  lifecycle_rule {
-    condition {
-      age            = 90
-      matches_prefix = ["mongo-full/"]
-    }
-    action {
-      type = "Delete"
-    }
-  }
+  # no lifecycle rules: retention is managed in k8s/mongo (backup-cleanup.yaml, backup-copy.yaml)
 }
