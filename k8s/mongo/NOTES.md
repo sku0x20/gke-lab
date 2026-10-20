@@ -58,11 +58,18 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   - hourly `incremental` (changes since the previous backup in the chain)
   - PITR: oplog slices every 10 min, so at most ~10 min of writes are lost.
   - PBM has no differential backups.
-- Schedules only fire while the cluster is up, and a new cluster has no chain. So after every deploy or restore, take a base. Without it the incrementals fail and PITR has nothing to replay onto:
+- Schedules only fire while the cluster is up, and a new cluster has no chain. Without a base the incrementals fail and PITR has nothing to replay onto. So every deploy takes one (`backup-base.yaml`), even a deploy with no changes. After a restore, deploy again for a new base:
 
   ```sh
-  kubectl create -f k8s/mongo/backup-base.yaml
+  k8s/deploy.sh mongo
   ```
+
+  The operator has no trigger for this (tasks are cron only), so kapp does it:
+  - `kapp.k14s.io/nonce` plus `update-strategy: always-replace`: the backup object is recreated on every deploy.
+  - `change-rule`: created only after the cluster's change group is done.
+  - `kapp-config.yaml` wait rules: the cluster is done when the operator has seen the new spec (`observedGeneration`), `state` is `ready`, and no `pendingSmartUpdate` is left. Without that wait, the backup would start while a rollout is pending and run first, because a smart update waits for running backups.
+  - `deploy.sh mongo` now blocks until the cluster is ready and the base is done. A failed base fails the deploy.
+- Restarts outside a deploy (node upgrades, evictions) aren't covered; the daily base catches them.
 - The chain lives on the node that took the base. If that member is gone, the next incremental fails until a new base.
 - Never `percona.com/delete-backup`. Scheduled backups get it unless `retention.deleteFromStorage: false`, and per-session teardown would then delete the files in GCS (or hang namespace deletion: the operator's fallback storage client ignores Workload Identity). `retention.count` only trims the Kubernetes objects.
 - Teardown, in this order:

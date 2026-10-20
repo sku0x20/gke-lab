@@ -1,0 +1,46 @@
+# kapp's own config: read by kapp, never applied to the cluster.
+# Tells kapp when the operator's custom resources are done, so deploy.sh waits for them
+apiVersion: kapp.k14s.io/v1alpha1
+kind: Config
+metadata:
+  name: kapp-config # kustomize needs a name; kapp ignores it
+
+waitRules:
+  # cluster: done once the operator has seen this spec and the rollout is over
+  - supportsObservedGeneration: true # status.observedGeneration == metadata.generation first
+    ytt:
+      funcContractV1:
+        resource.star: |
+          def is_done(resource):
+              status = resource.status
+              for c in getattr(status, "conditions", []):
+                  if c.type == "pendingSmartUpdate" and c.status == "True":
+                      return {"done": False, "successful": False, "message": "rollout pending"}
+                  end
+              end
+              state = getattr(status, "state", "")
+              if state == "ready":
+                  return {"done": True, "successful": True, "message": "ready"}
+              end
+              # error can be transient (operator retries); kapp's timeout ends a real one
+              return {"done": False, "successful": False, "message": "state: " + state}
+          end
+    resourceMatchers:
+      - apiVersionKindMatcher: {apiVersion: psmdb.percona.com/v1, kind: PerconaServerMongoDB}
+
+  # backup: done when PBM finishes; a failed backup fails the deploy
+  - ytt:
+      funcContractV1:
+        resource.star: |
+          def is_done(resource):
+              status = getattr(resource, "status", None)
+              state = getattr(status, "state", "") if status != None else ""
+              if state == "ready":
+                  return {"done": True, "successful": True, "message": "ready"}
+              elif state == "error":
+                  return {"done": True, "successful": False, "message": getattr(status, "error", "error")}
+              end
+              return {"done": False, "successful": False, "message": "state: " + state}
+          end
+    resourceMatchers:
+      - apiVersionKindMatcher: {apiVersion: psmdb.percona.com/v1, kind: PerconaServerMongoDBBackup}

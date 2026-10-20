@@ -2,6 +2,9 @@ apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
   name: mongo # pods: mongo-rs0-0..2
+  annotations:
+    # backup-base.yaml waits for this group; kapp-config.yaml says when it's done
+    kapp.k14s.io/change-group: mongo/cluster
   # run by the operator on delete, so destroy this app before psmdb-operator
   finalizers:
     - percona.com/delete-psmdb-pods-in-order # secondaries first, primary last

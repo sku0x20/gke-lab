@@ -7,3 +7,5 @@ namespace: mongo
 resources:
   - serviceaccount.yaml
   - psmdb.yaml
+  - backup-base.yaml
+  - kapp-config.yaml
