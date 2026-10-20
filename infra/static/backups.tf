@@ -9,11 +9,6 @@ resource "google_storage_bucket" "mongo_backup" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
-  # default is 7 days of soft delete, billed; backups expire on purpose here
-  soft_delete_policy {
-    retention_duration_seconds = 0
-  }
-
   # retention lives here, not in PBM: backup tasks keep files on delete
   # (deleteFromStorage: false), so per-session teardown can't wipe them
   lifecycle_rule {
