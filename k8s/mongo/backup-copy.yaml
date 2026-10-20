@@ -31,34 +31,41 @@ spec:
           containers:
             - name: gcloud
               image: gcr.io/google.com/cloudsdktool/google-cloud-cli:589.0.0-slim
-              command: ["bash", "-euo", "pipefail", "-c"]
+              command: ["python3", "-c"]
               args:
                 - |
-                  src=gs://lab-gke-2610-mongo-backup/mongo
-                  dst=gs://lab-gke-2610-mongo-backup/mongo-full
+                  import json, subprocess, sys
 
-                  # newest first (backup names are timestamps); a base is
-                  # type incremental with no src_backup
-                  name=
-                  for meta in $(gcloud storage ls "$src/*.pbm.json" | sort -r); do
-                    if gcloud storage cat "$meta" | python3 -c '
-                  import json, sys
-                  m = json.load(sys.stdin)
-                  base = m["type"] == "incremental" and not m.get("src_backup")
-                  sys.exit(0 if base and m["status"] == "done" else 1)'; then
-                      name=$(basename "$meta" .pbm.json)
-                      break
-                    fi
-                  done
-                  if [ -z "$name" ]; then echo "no finished base"; exit 1; fi
+                  SRC = "gs://lab-gke-2610-mongo-backup/mongo"
+                  DST = "gs://lab-gke-2610-mongo-backup/mongo-full"
 
-                  if gcloud storage ls "$dst/$name.pbm.json" >/dev/null 2>&1; then
-                    echo "$name already copied"; exit 0
-                  fi
-                  gcloud storage cp -r "$src/$name" "$dst/"
+                  def gcloud(*args, check=True):
+                      # stdout returned; stderr goes to the pod log
+                      return subprocess.run(["gcloud", "storage", *args], check=check,
+                                            stdout=subprocess.PIPE, text=True)
+
+                  def is_finished_base(meta):
+                      # a base is type incremental with no src_backup
+                      return (meta["type"] == "incremental" and not meta.get("src_backup")
+                              and meta["status"] == "done")
+
+                  # newest first: backup names are timestamps
+                  urls = gcloud("ls", f"{SRC}/*.pbm.json", check=False).stdout.split()
+                  for url in sorted(urls, reverse=True):
+                      if is_finished_base(json.loads(gcloud("cat", url).stdout)):
+                          name = url.rsplit("/", 1)[1].removesuffix(".pbm.json")
+                          break
+                  else:
+                      sys.exit("no finished base")
+
+                  if gcloud("ls", f"{DST}/{name}.pbm.json", check=False).returncode == 0:
+                      print(f"{name} already copied")
+                      sys.exit()
+
+                  gcloud("cp", "-r", f"{SRC}/{name}", f"{DST}/")
                   # metadata last: its presence marks a complete copy
-                  gcloud storage cp "$src/$name.pbm.json" "$dst/"
-                  echo "copied $name"
+                  gcloud("cp", f"{SRC}/{name}.pbm.json", f"{DST}/")
+                  print(f"copied {name}")
               env:
                 - name: CLOUDSDK_CONFIG # gcloud writes its config here; root is read-only
                   value: /tmp/gcloud
