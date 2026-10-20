@@ -2,7 +2,7 @@
 
 Used by the backup-copy CronJobs (backup-copy.yaml):
   daily:   mongo/      -> mongo-full/     (kept 30 days)
-  monthly: mongo-full/ -> mongo-monthly/  (kept 365 days, Archive)
+  monthly: mongo-full/ -> mongo-monthly/  (kept forever)
 Idempotent: an already copied base is skipped.
 """
 
@@ -13,7 +13,6 @@ import sys
 
 SRC = os.environ["SRC"]  # e.g. gs://bucket/mongo
 DST = os.environ["DST"]
-STORAGE_CLASS = os.environ.get("STORAGE_CLASS")  # empty: the bucket's default
 
 
 def gcloud(*args, check=True):
@@ -41,8 +40,7 @@ if gcloud("ls", f"{DST}/{name}.pbm.json", check=False).returncode == 0:
     print(f"{name} already copied")
     sys.exit()
 
-opts = [f"--storage-class={STORAGE_CLASS}"] if STORAGE_CLASS else []
-gcloud("cp", *opts, "-r", f"{SRC}/{name}", f"{DST}/")
+gcloud("cp", "-r", f"{SRC}/{name}", f"{DST}/")
 # metadata last: its presence marks a complete copy
-gcloud("cp", *opts, f"{SRC}/{name}.pbm.json", f"{DST}/")
+gcloud("cp", f"{SRC}/{name}.pbm.json", f"{DST}/")
 print(f"copied {name}")

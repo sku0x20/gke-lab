@@ -62,7 +62,7 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
   ```
 
-  Monthly: on the 1st, `backup-copy-monthly` copies the newest full from `mongo-full/` to `mongo-monthly/`, as Archive storage. Kept 365 days, so ~12 at any time. Archive bills at least 365 days per object, matching the retention; it's still online, restores just pay a per-GB retrieval fee. Same script (`backup-copy.py`), different `SRC`/`DST`:
+  Monthly: on the 1st, `backup-copy-monthly` copies the newest full from `mongo-full/` to `mongo-monthly/`. Kept forever (no lifecycle rule), in the bucket's default storage class. Same script (`backup-copy.py`), different `SRC`/`DST`:
 
   ```sh
   kubectl -n mongo create job --from=cronjob/backup-copy-monthly backup-copy-monthly-now
@@ -78,7 +78,7 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   # ... restore ...
   kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":false}}'
   ```
-- Later, for disaster recovery: today every copy is in one bucket, and the agents can delete all of it. Move the 30-day copies to a separate bucket (another region, ideally another project) with a 30-day retention lock, written by a create-only identity running outside the cluster.
+- Later, for disaster recovery: today every copy is in one bucket, and the agents can delete all of it. Move the copies to a separate bucket (another region, ideally another project) with a retention lock, written by a create-only identity running outside the cluster. Monthlies typically get their own bucket with Archive as its default storage class (cheapest per GB, 365-day minimum, still online).
 - No keys: without `credentialsSecret`, PBM uses Workload Identity. The pods run as KSA `mongo`, which has `roles/storage.objectUser` on the bucket (`infra/dynamic/iam.tf`).
 - Strategy:
   - daily `incremental-base` (full physical) at 00:00 UTC
