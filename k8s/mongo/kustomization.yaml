@@ -11,3 +11,9 @@ resources:
   - backup-cleanup.yaml
   - backup-copy.yaml
   - kapp-config.yaml
+
+# name gets a content hash, so a script change updates both CronJobs
+configMapGenerator:
+  - name: backup-copy
+    files:
+      - backup-copy.py

@@ -20,11 +20,24 @@ resource "google_storage_bucket" "mongo_backup" {
     }
   }
 
+  # monthly fulls (backup-copy-monthly): kept a year, ~12 at any time. Written as Archive,
+  # whose 365-day minimum matches, so no early-deletion charge
+  lifecycle_rule {
+    condition {
+      age            = 365
+      matches_prefix = ["mongo-monthly/"]
+    }
+    action {
+      type = "Delete"
+    }
+  }
+
   # backstop only: PBM's cleanup (k8s/mongo/backup-cleanup.yaml) keeps 48h PITR / 7d backups,
   # but only runs while the cluster is up
   lifecycle_rule {
     condition {
-      age = 90
+      age            = 90
+      matches_prefix = ["mongo/"] # not mongo-monthly/: kept 365 days
     }
     action {
       type = "Delete"

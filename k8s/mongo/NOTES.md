@@ -62,11 +62,17 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
   ```
 
+  Monthly: on the 1st, `backup-copy-monthly` copies the newest full from `mongo-full/` to `mongo-monthly/`, as Archive storage. Kept 365 days, so ~12 at any time. Archive bills at least 365 days per object, matching the retention; it's still online, restores just pay a per-GB retrieval fee. Same script (`backup-copy.py`), different `SRC`/`DST`:
+
+  ```sh
+  kubectl -n mongo create job --from=cronjob/backup-copy-monthly backup-copy-monthly-now
+  ```
+
   Restore from a copy: suspend the cleanup (it would delete a copy older than 7 days), copy `<name>/` and then `<name>.pbm.json` back into `mongo/`, resync, restore by name, then resume the cleanup:
 
   ```sh
   kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'
-  gcloud storage cp -r gs://lab-gke-2610-mongo-backup/mongo-full/<name> gs://lab-gke-2610-mongo-backup/mongo/
+  gcloud storage cp -r gs://lab-gke-2610-mongo-backup/mongo-full/<name>   # or mongo-monthly/ gs://lab-gke-2610-mongo-backup/mongo/
   gcloud storage cp gs://lab-gke-2610-mongo-backup/mongo-full/<name>.pbm.json gs://lab-gke-2610-mongo-backup/mongo/
   kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm config --force-resync
   # ... restore ...

@@ -1,9 +1,12 @@
-# Keeps fulls for 30 days. PBM's cleanup deletes whole chains at 7 days, and a second PBM
-# storage would take another full backup from mongod. Instead, copy the newest finished base
-# (a complete physical backup on its own) to mongo-full/: a GCS-side copy, no load on mongod.
-# mongo-full/ is outside PBM's prefix, so PBM never sees or cleans it; the bucket's lifecycle
-# rule deletes it at 30 days. Idempotent: an already copied base is skipped. Run it now with:
+# Long-term fulls, copied by backup-copy.py (a GCS-side copy, no load on mongod):
+#   backup-copy          daily    mongo/      -> mongo-full/     kept 30 days
+#   backup-copy-monthly  1st      mongo-full/ -> mongo-monthly/  kept 365 days, Archive
+# Why copies: PBM's cleanup deletes whole chains at 7 days, and a second PBM storage would take
+# another full backup from mongod. A base is a complete physical backup on its own.
+# Both prefixes are outside PBM's (mongo/), so PBM never sees or cleans them; the bucket's
+# lifecycle rules delete them. Idempotent: an already copied base is skipped. Run now with:
 #   kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
+#   kubectl -n mongo create job --from=cronjob/backup-copy-monthly backup-copy-monthly-now
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -31,42 +34,12 @@ spec:
           containers:
             - name: gcloud
               image: gcr.io/google.com/cloudsdktool/google-cloud-cli:589.0.0-slim
-              command: ["python3", "-c"]
-              args:
-                - |
-                  import json, subprocess, sys
-
-                  SRC = "gs://lab-gke-2610-mongo-backup/mongo"
-                  DST = "gs://lab-gke-2610-mongo-backup/mongo-full"
-
-                  def gcloud(*args, check=True):
-                      # stdout returned; stderr goes to the pod log
-                      return subprocess.run(["gcloud", "storage", *args], check=check,
-                                            stdout=subprocess.PIPE, text=True)
-
-                  def is_finished_base(meta):
-                      # a base is type incremental with no src_backup
-                      return (meta["type"] == "incremental" and not meta.get("src_backup")
-                              and meta["status"] == "done")
-
-                  # newest first: backup names are timestamps
-                  urls = gcloud("ls", f"{SRC}/*.pbm.json", check=False).stdout.split()
-                  for url in sorted(urls, reverse=True):
-                      if is_finished_base(json.loads(gcloud("cat", url).stdout)):
-                          name = url.rsplit("/", 1)[1].removesuffix(".pbm.json")
-                          break
-                  else:
-                      sys.exit("no finished base")
-
-                  if gcloud("ls", f"{DST}/{name}.pbm.json", check=False).returncode == 0:
-                      print(f"{name} already copied")
-                      sys.exit()
-
-                  gcloud("cp", "-r", f"{SRC}/{name}", f"{DST}/")
-                  # metadata last: its presence marks a complete copy
-                  gcloud("cp", f"{SRC}/{name}.pbm.json", f"{DST}/")
-                  print(f"copied {name}")
+              command: ["python3", "/scripts/backup-copy.py"]
               env:
+                - name: SRC
+                  value: gs://lab-gke-2610-mongo-backup/mongo
+                - name: DST
+                  value: gs://lab-gke-2610-mongo-backup/mongo-full
                 - name: CLOUDSDK_CONFIG # gcloud writes its config here; root is read-only
                   value: /tmp/gcloud
               resources:
@@ -81,9 +54,78 @@ spec:
                   drop: ["ALL"]
                 readOnlyRootFilesystem: true
               volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
                 - name: tmp
                   mountPath: /tmp
           volumes:
+            - name: scripts
+              configMap:
+                name: backup-copy # generated from backup-copy.py; kustomize adds the hash
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-copy-monthly
+spec:
+  schedule: "0 3 1 * *" # 1st of the month, after that day's 02:00 copy to mongo-full/
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          # same KSA as the agents: its Workload Identity already has the bucket
+          serviceAccountName: mongo
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000 # image's cloudsdk user
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: gcloud
+              image: gcr.io/google.com/cloudsdktool/google-cloud-cli:589.0.0-slim
+              command: ["python3", "/scripts/backup-copy.py"]
+              env:
+                - name: SRC
+                  value: gs://lab-gke-2610-mongo-backup/mongo-full
+                - name: DST
+                  value: gs://lab-gke-2610-mongo-backup/mongo-monthly
+                # bills at least 365 days per object, the same as the retention; still online
+                - name: STORAGE_CLASS
+                  value: ARCHIVE
+                - name: CLOUDSDK_CONFIG # gcloud writes its config here; root is read-only
+                  value: /tmp/gcloud
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 512Mi
+                limits:
+                  memory: 512Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: scripts
+              configMap:
+                name: backup-copy # generated from backup-copy.py; kustomize adds the hash
             - name: tmp
               emptyDir:
                 sizeLimit: 64Mi
