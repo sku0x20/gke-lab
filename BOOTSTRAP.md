@@ -131,7 +131,7 @@ Dynamic finds static's resources by name (data sources), so its plan fails if st
 
 Static creates secrets empty; tofu never sees their values. Each app's folder under `k8s/` has a script that adds its value; run it once after the first static apply.
 
-Don't destroy `infra/static` in the normal flow. It holds what must outlive the cluster, such as secrets, whose values would have to be re-added. To start from scratch, destroy dynamic first, then static: the VPC can't be deleted while the NAT or cluster still uses it.
+Don't destroy `infra/static` in the normal flow. It holds what must outlive the cluster, such as secrets, whose values would have to be re-added, and the mongo backup bucket (tofu won't delete it while it holds backups). To start from scratch, destroy dynamic first, then static: the VPC can't be deleted while the NAT or cluster still uses it.
 
 ## Teardown
 

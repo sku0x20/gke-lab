@@ -45,7 +45,24 @@ See `../DEV-ACCESS.md`. Mongo's part: devs log in with their own `spec.users` us
 
 ## Data lifetime
 
-Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and the generated Secrets with the resource.
+Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and the generated Secrets with the resource. Backups in GCS outlive it.
+
+## Backups
+
+PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data files from the shared volume and streams them, compressed, straight to GCS. Nothing is staged on disk.
+
+- Bucket `lab-gke-2610-mongo-backup` in `infra/static`, prefix `mongo`. Expiry: the bucket's 90-day lifecycle rule (plus 7 days of soft delete), not PBM.
+- No keys: without `credentialsSecret`, PBM uses Workload Identity. The pods run as KSA `mongo`, which has `roles/storage.objectUser` on the bucket (`infra/dynamic/iam.tf`).
+- Strategy:
+  - daily `incremental-base` (full physical) at 00:00 UTC
+  - hourly `incremental` (changes since the previous backup in the chain)
+  - PITR: oplog slices every 10 min, so at most ~10 min of writes are lost.
+  - PBM has no differential backups.
+- Schedules only fire while the cluster is up, and a new cluster has no chain. So after every deploy or restore, take a base: `kubectl create -f k8s/mongo/backup-base.yaml`. Without it the incrementals fail and PITR has nothing to replay onto.
+- The chain lives on the node that took the base. If that member is gone, the next incremental fails until a new base.
+- Never `percona.com/delete-backup`. Scheduled backups get it unless `retention.deleteFromStorage: false`, and per-session teardown would then delete the files in GCS (or hang namespace deletion: the operator's fallback storage client ignores Workload Identity). `retention.count` only trims the Kubernetes objects.
+- Restore into a new session uses `backupSource` (a GCS path), since the backup objects are gone. A physical restore stops the whole replset.
+- Not yet restorable across sessions: a physical restore needs the same encryption key (`mongo-mongodb-encryption-key`), and backups include the system users (`mongo-system-users`). Both are generated per session today. Next step: keep them in Secret Manager.
 
 ## Audit log (not enabled)
 
