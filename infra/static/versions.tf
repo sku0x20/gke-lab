@@ -6,6 +6,11 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 8.7"
     }
+    # ephemeral random_password: generated values never reach state
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9"
+    }
   }
 
   # hardcoded: a backend block can't read env vars like $GOOGLE_PROJECT
