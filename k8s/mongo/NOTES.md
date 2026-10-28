@@ -103,6 +103,41 @@ Never rotate the encryption key this way: the data and every physical backup are
 
 A GKE admission policy lets only Secret Sync and the garbage collector delete synced Secrets. The finalizer's delete fails and retries until kapp has deleted the SecretSyncs and the garbage collector removes the Secrets. That's why the SecretSyncs have no "delete after" rule: it would deadlock.
 
+## Encryption at rest
+
+### What does "at rest" mean here?
+
+The data files on each member's disk (the PVC, a GCE persistent disk). mongod's storage engine (WiredTiger) encrypts them with AES-256 before writing (`--enableEncryption`). Our key from Secret Manager is the master key; it encrypts per-database keys, which encrypt the data.
+
+Not covered: data in memory (mongod works with it decrypted), data on the network (that's TLS), and anyone who can log in to mongo.
+
+### Doesn't GCP already encrypt disks?
+
+Yes, always, with Google's keys. That protects against a stolen physical disk. Ours also protects against anyone who gets a disk or snapshot *through GCP*, like someone with Compute permissions in the project.
+
+### Why does it matter for backups?
+
+Physical backups copy the encrypted files as they are, so the backups in GCS are encrypted too: unreadable without our key, whoever can read the bucket. That's also why a restore needs the same key, kept in Secret Manager.
+
+### What does it cost?
+
+- CPU only when data moves between disk and memory. Reads from mongod's cache cost nothing extra. With AES hardware support (all GCE CPUs), typically around 5–15% throughput on disk-heavy workloads, less when the working set fits in memory. Not measured here; measure the real workload if it matters.
+- No extra storage: mongod compresses first, then encrypts.
+
+### What's the risk?
+
+Losing the key loses all data and every backup. Keep the Secret Manager secret safe (restricted IAM, and for production a second copy kept separately).
+
+Rotation is hard: with a key file Percona can't rotate the master key in place (that needs Vault or KMIP). Changing it means re-syncing every member.
+
+### Why not CMEK (Cloud KMS keys on the disks and bucket) instead?
+
+No mongod overhead, and the key can be revoked in KMS. But GCP decrypts on access, so anyone with Compute plus KMS permissions can read a disk. It protects less than encryption inside mongod.
+
+### So keep it?
+
+Yes. The overhead is small, and it's the only option that keeps disks and backups safe from people inside the project. The real job is protecting the key.
+
 ## TLS
 
 ### What is encrypted?
