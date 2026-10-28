@@ -1,20 +1,12 @@
-# Full physical backup taken on every `k8s/deploy.sh mongo`, once the cluster is ready.
-# Starts a new incremental chain and gives PITR a base: a new cluster has neither, and a
-# rollout may break the chain. Every deploy takes one, even one with no changes.
-# Restarts outside a deploy (node upgrades, evictions) wait for the daily base.
+# On-demand full physical backup; starts a new incremental chain and gives PITR a base.
+# Not in kustomization.yaml: taken by hand, not on deploy. Bases otherwise come only from
+# the daily-base task (00:00 UTC), so take one on a new cluster and after a restore:
+#   kubectl -n mongo create -f k8s/mongo/backup-base.yaml
 # no percona.com/delete-backup finalizer: deleting this object must not delete the files in GCS
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDBBackup
 metadata:
-  name: deploy-base
-  annotations:
-    # kapp fills in a new value on every deploy, so this object always changes...
-    kapp.k14s.io/nonce: ""
-    # ...and is deleted and recreated: the operator sees a new backup each time
-    kapp.k14s.io/update-strategy: always-replace
-    # only after the cluster is ready (wait rule in kapp-config.yaml); otherwise the
-    # backup would run before a pending rollout, which waits for running backups
-    kapp.k14s.io/change-rule: "upsert after upserting mongo/cluster"
+  generateName: base- # a new object each time
 spec:
   clusterName: mongo
   storageName: gcs

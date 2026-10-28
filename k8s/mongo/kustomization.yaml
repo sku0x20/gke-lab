@@ -9,7 +9,6 @@ resources:
   - secretproviderclass.yaml
   - secretsync.yaml
   - psmdb.yaml
-  - backup-base.yaml
   - backup-cleanup.yaml
   - backup-copy.yaml
   - kapp-config.yaml

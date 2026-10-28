@@ -48,20 +48,3 @@ waitRules:
           end
     resourceMatchers:
       - apiVersionKindMatcher: {apiVersion: secret-sync.gke.io/v1, kind: SecretSync}
-
-  # backup: done when PBM finishes; a failed backup fails the deploy
-  - ytt:
-      funcContractV1:
-        resource.star: |
-          def is_done(resource):
-              status = getattr(resource, "status", None)
-              state = getattr(status, "state", "") if status != None else ""
-              if state == "ready":
-                  return {"done": True, "successful": True, "message": "ready"}
-              elif state == "error":
-                  return {"done": True, "successful": False, "message": getattr(status, "error", "error")}
-              end
-              return {"done": False, "successful": False, "message": "state: " + state}
-          end
-    resourceMatchers:
-      - apiVersionKindMatcher: {apiVersion: psmdb.percona.com/v1, kind: PerconaServerMongoDBBackup}

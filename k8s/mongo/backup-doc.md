@@ -39,7 +39,7 @@ Only when that member's change map is gone or unreachable:
 - Its data is rebuilt from scratch (e.g. a resync from another member): new files, no map.
 - Not when the pod moves to another node: the PVC (its files) moves with it.
 
-A broken chain loses no data: PITR slices don't depend on it, so a restore uses the last good backup plus oplog, just slower. The next base (daily, or the one every deploy takes) starts a new chain.
+A broken chain loses no data: PITR slices don't depend on it, so a restore uses the last good backup plus oplog, just slower. The next base (daily, or one taken by hand) starts a new chain.
 
 ## Open question: does a restart wipe the map?
 
@@ -63,7 +63,7 @@ EOF
 kubectl -n mongo get psmdb-backup -w             # ready = survives restarts; error = doesn't
 ```
 
-Either way, the base every deploy takes restarts the chain after a rollout.
+Either way, a base by hand (`backup-base.yaml`) restarts the chain after a rollout; otherwise the daily one does.
 
 # PITR
 
@@ -91,9 +91,9 @@ With the chain broken after `inc 2`, a restore to 11:00 uses `inc 2` and replays
 
 ## What breaks it
 
-- No backup to replay onto: the base every deploy takes covers a new cluster.
+- No backup to replay onto: a new cluster has none until a base by hand or the daily one.
 - A gap: the oplog is fixed-size, and old entries roll off. If no agent uploads for longer than the oplog holds, those entries are gone. `pbm status` shows the gap; times inside it can't be restored. The next backup starts a new timeline.
-- After a restore: history after that point is rewritten, and later slices no longer apply. Deploy again for a new base.
+- After a restore: history after that point is rewritten, and later slices no longer apply. Take a new base by hand.
 - Rotation: `backup-cleanup.yaml` deletes slices older than 48h (back to the nearest backup).
 
 Here at most ~10 min of writes are lost, the slice not yet uploaded. At teardown everything up to ~10 min before the destroy is already in GCS.

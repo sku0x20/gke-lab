@@ -123,20 +123,30 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
 - PITR: oplog slices every 10 min, so at most ~10 min of writes are lost.
 - PBM has no differential backups.
 
-### Why does every deploy take a backup?
+### Does a deploy take a backup?
 
-Schedules only fire while the cluster is up, and a new cluster has no chain. Without a base the incrementals fail and PITR has nothing to replay onto. So `backup-base.yaml` runs on every `deploy.sh mongo`, even one with no changes.
+No. Bases come from the `daily-base` task (00:00 UTC) or by hand. A deploy only waits until the cluster is `ready` (`kapp-config.yaml`).
 
-The operator can't trigger that (tasks are cron only), so kapp does:
+### What happens on a new cluster until the first base?
 
-- `kapp.k14s.io/nonce` plus `update-strategy: always-replace`: the backup object is recreated on every deploy.
-- `change-rule`: it's created only after the cluster's change group is done.
-- `kapp-config.yaml` wait rules: the cluster is done when the operator has seen the new spec (`observedGeneration`), `state` is `ready`, and no `pendingSmartUpdate` is left. Without that wait, the backup would run before a pending rollout, because a smart update waits for running backups.
-- So `deploy.sh mongo` blocks until the cluster is ready and the base is done. A failed base fails the deploy.
+No protection. Incrementals fail (nothing to chain to), and PITR waits, because it needs a base to replay onto. Take a base by hand right after the first deploy.
 
-### What about restarts outside a deploy?
+### How do I take a base by hand?
 
-Node upgrades and evictions aren't covered; the daily base catches them. The chain lives on the node that took the base, so if that member is gone, the next incremental fails until a new base. Details and the open restart question: `backup-doc.md`.
+```sh
+kubectl -n mongo create -f k8s/mongo/backup-base.yaml
+kubectl -n mongo get psmdb-backup -w   # until ready
+```
+
+Take one:
+
+- on a new cluster
+- after a restore
+- after a rollout or a member loss (see below)
+
+### What about restarts?
+
+The chain lives on the node that took the base. If that member restarts or is gone, the next incremental may fail until a new base. The daily base catches it, or take one by hand. Details and the open restart question: `backup-doc.md`.
 
 ### How long are backups kept?
 
@@ -197,12 +207,8 @@ Yes. Same flow as any restore, because the key and system users come from Secret
 
 ### What's different in a new session?
 
-Two traps, both because `deploy.sh mongo` takes a base of the **empty** cluster into the same `mongo/` prefix:
-
-- The newest backup and "latest" PITR are the empty cluster. Pick a backup and time from **before** it.
-- `backup-cleanup` measures from the newest backup, now the empty one. Its first run (:30) deletes the old session's PITR slices older than 48h and backups older than 7 days. Suspend it right after the deploy.
-
-Also harmless: the 02:00 `backup-copy` copies the empty base into `mongo-full/`.
+- Don't take a base before the restore. It would back up the **empty** cluster into the same `mongo/` prefix, and "newest" would mean empty. If the session runs past 00:00, `daily-base` does exactly that, so always pick the backup by time.
+- Suspend `backup-cleanup` right after the deploy. Its first run (:30) can delete the old session's PITR slices older than 48h and backups older than 7 days.
 
 ### How do I restore?
 
@@ -221,8 +227,10 @@ sed -e "s/BACKUP_NAME/$BACKUP/" -e "s/PITR_DATE/$DATE/" k8s/mongo/restore.yaml |
 # 3. wait for ready (minutes: pods stop, files download, oplog replays, pods restart)
 kubectl -n mongo get psmdb-restore -w
 
-# 4. new base and PITR on the restored data; also unsuspends backup-cleanup
-k8s/deploy.sh mongo
+# 4. new base on the restored data (PITR resumes from it), then resume the cleanup
+kubectl -n mongo create -f k8s/mongo/backup-base.yaml
+kubectl -n mongo get psmdb-backup -w   # until ready
+kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":false}}'
 ```
 
 ### Why does `restore.yaml` use a GCS path, not a backup name?
@@ -233,9 +241,9 @@ k8s/deploy.sh mongo
 
 Before restoring, the operator itself checks that the backup exists and is complete, as its own KSA `percona-server-mongodb-operator`. `infra/dynamic/iam.tf` gives it read-only access. The agents (KSA `mongo`) do the actual restore.
 
-### Why deploy again after a restore?
+### Why a new base after a restore?
 
-The operator turns PITR off during the restore, and the old chain doesn't continue. The deploy takes a new base, so incrementals and PITR start over on the restored data.
+The operator turns PITR off during the restore, and the old chain doesn't continue. A new base restarts incrementals and PITR on the restored data.
 
 ### Can I restore from `mongo-full/` or `mongo-monthly/`?
 
@@ -272,7 +280,7 @@ mongo_eval() {
 }
 ```
 
-1. Session A, after the deploy (base done): write a marker, note the time.
+1. Session A, after the deploy and a base by hand: write a marker, note the time.
 
    ```sh
    mongo_eval 'db.getSiblingDB("drill").marker.insertOne({at: new Date()})'
@@ -287,7 +295,7 @@ mongo_eval() {
    - the first marker is back, the second isn't
    - `kubectl -n mongo get psmdb mongo` is `ready` (the operator logs in with Secret Manager's passwords, which match the restored users)
    - no "unable to decrypt" in `kubectl -n mongo logs mongo-rs0-0 -c mongod` (same key)
-7. `k8s/deploy.sh mongo` for a new base; `pbm status` shows PITR running again.
+7. Take a base by hand and resume `backup-cleanup` (restore step 4); `pbm status` shows PITR running again.
 
 ## Audit log
 

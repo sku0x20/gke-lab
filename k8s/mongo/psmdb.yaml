@@ -3,8 +3,6 @@ kind: PerconaServerMongoDB
 metadata:
   name: mongo # pods: mongo-rs0-0..2
   annotations:
-    # backup-base.yaml waits for this group; kapp-config.yaml says when it's done
-    kapp.k14s.io/change-group: mongo/cluster
     # the synced Secrets must exist first, or the operator generates its own (random key and
     # passwords) and Secret Sync can't take them over. Create order only: a delete rule would
     # deadlock with the finalizer below (secretsync.yaml)
@@ -119,8 +117,8 @@ spec:
     pitr:
       enabled: true
       oplogSpanMin: 10
-    # schedules (UTC) only fire while the cluster is up; a fresh cluster gets its first
-    # base from the deploy (backup-base.yaml), or the incrementals have nothing to chain to.
+    # schedules (UTC) only fire while the cluster is up. A fresh cluster has no base until
+    # 00:00 or a manual one (backup-base.yaml); until then incrementals fail and PITR waits.
     # deleteFromStorage: false on every task: teardown deletes the backup objects, and
     # that must never delete files in GCS. Rotation: backup-cleanup.yaml
     tasks:
