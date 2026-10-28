@@ -1,163 +1,267 @@
-# MongoDB
+# MongoDB FAQ
 
-Percona Server for MongoDB through the Percona operator (PSMDB). Two kapp apps:
+Percona Server for MongoDB, run by the Percona operator (PSMDB).
 
-- `psmdb-operator`: CRDs, RBAC, operator Deployment, and the `mongo` namespace.
-- `mongo`: one `PerconaServerMongoDB` resource; the operator creates everything else (StatefulSet, Services, Secrets, TLS).
+## Basics
 
-## Why an operator
+### What gets deployed?
 
-A replica set needs `rs.initiate()`, a keyfile, member add/remove, users, TLS, and primary-aware restarts. Plain manifests mean scripting all of that. Percona Server also has features MongoDB Community lacks (audit log, encryption at rest).
+Two kapp apps:
 
-## Operator
+- `psmdb-operator`: CRDs, RBAC, the operator Deployment, and the `mongo` namespace.
+- `mongo`: one `PerconaServerMongoDB` resource. The operator creates everything else (StatefulSet, Services, Secrets, TLS).
 
-- Namespaced (Role, watches only `mongo`), so the database lives in the operator's namespace.
-- Destroy `mongo` before `psmdb-operator`: the finalizers (`delete-psmdb-pods-in-order`, `delete-psmdb-pvc`) run in the operator.
-- Upstream manifests by URL, pinned to a release tag; upgrade = bump the tag, then `crVersion`.
-- `RECONCILE_INTERVAL` 30s (upstream 5s): the periodic re-check of state Kubernetes sends no events for. Kubernetes changes still reconcile immediately.
+### Why an operator and not plain manifests?
+
+A replica set needs `rs.initiate()`, a keyfile, member add/remove, users, TLS, and primary-aware restarts. With plain manifests we'd script all of that. Percona Server also has features MongoDB Community lacks (audit log, encryption at rest).
+
+### How is the operator set up?
+
+- Namespaced: a Role that watches only `mongo`, so the database lives in the operator's namespace.
+- Upstream manifests by URL, pinned to a release tag.
+- `RECONCILE_INTERVAL` 30s (upstream 5s). That's the periodic re-check for state Kubernetes sends no events for; Kubernetes changes still reconcile immediately.
 - Telemetry left on.
+
+### In what order do I deploy and destroy?
+
+Deploy `psmdb-operator`, then `mongo`. Destroy in reverse:
+
+```sh
+k8s/destroy.sh mongo
+kubectl -n mongo delete psmdb-backup,psmdb-restore --all   # GCS files stay
+k8s/destroy.sh psmdb-operator
+```
+
+- `mongo` goes first because its finalizers (`delete-psmdb-pods-in-order`, `delete-psmdb-pvc`) run inside the operator.
+- Backup objects go before the operator: every started backup carries the `internal.percona.com/release-lock` finalizer, which only the operator removes. Left behind, they keep the namespace stuck in Terminating.
+
+### How long does the data live?
+
+One session, like valkey. `delete-psmdb-pvc` deletes the StatefulSets, PVCs and the operator's own Secrets. Backups in GCS and the values in Secret Manager outlive it.
 
 ## Upgrades
 
-- `upgradeOptions.apply: disabled`: the operator never changes `spec.image`, so git stays the source of truth (an auto-upgrade would fight kapp).
-- Upgrade = edit `spec.image`, deploy. SmartUpdate restarts secondaries one at a time, steps down the primary, restarts it last.
-- `setFCV: true`: after a major upgrade rolls out, featureCompatibilityVersion is raised, which ends the rollback window.
+### How do I upgrade MongoDB?
 
-## Autopilot
+Edit `spec.image` and deploy. SmartUpdate restarts the secondaries one at a time, steps down the primary, and restarts it last.
 
-- Pod anti-affinity (one member per node) needs at least 500m CPU per pod, or GKE Warden rejects the StatefulSet. 3 × 500m / 1Gi is billed.
-- System pods (kube-dns) can preempt the operator while Autopilot adds nodes. Harmless: it holds no state and resumes from the cluster.
+### Why doesn't the operator upgrade itself?
 
-## Pod Security (restricted)
+`upgradeOptions.apply: disabled`, so git stays the source of truth. An auto-upgrade would fight kapp.
 
-- Setting `podSecurityContext` replaces the operator's defaults, so `runAsUser`/`fsGroup` 1001 are repeated.
-- `readOnlyRootFilesystem` needs `env: HOME=/`. Otherwise mongosh warns on stdout about `~/.mongodb`, the operator's primary check (stdout must be exactly `true`) fails, and the replset never initializes. Upstream #2594 (K8SPSMDB-1853).
+### When does a major upgrade become final?
 
-## Users
+`setFCV: true` raises featureCompatibilityVersion after the rollout. That ends the rollback window.
 
-- `secrets.users: mongo-system-users`: the operator's own accounts (clusterAdmin, userAdmin, clusterMonitor, databaseAdmin, backup). `internal-mongo-users` is the operator's copy.
-- That Secret and `mongo-mongodb-encryption-key` come from Secret Manager (`infra/static/secrets.tf`) through GKE Secret Sync (`secretsync.yaml`), so every session gets the same key and passwords and a backup restores into a new cluster.
-  - The synced Secrets must exist before the cluster resource. Otherwise the operator generates its own and Secret Sync can't take them over. kapp creates `mongo/secrets` first and waits until both are synced (`kapp-config.yaml`).
-  - Only passwords are synced; the operator adds the `MONGODB_*_USER` keys. Secret Sync writes with server-side apply, so it leaves those alone.
-  - Synced once, no rotation. To rotate a password, bump its version in `infra/static`, then change `spec.forceSynchronization` on the SecretSync; the operator then changes it in mongod. Older backups still hold the old password. Never rotate the encryption key this way: the data and every physical backup are encrypted with it.
-- App users: `spec.users`, a password Secret per user, roles scoped to the app's database. Removing an entry doesn't drop the user.
-- Passwords from Secret Manager through Secret Sync, like the system users (the operator needs a real Kubernetes Secret; the CSI add-on only mounts files).
+### How do I upgrade the operator?
 
-## Dev access
+Bump the release tag in `k8s/psmdb-operator`, then `crVersion` in `psmdb.yaml`.
 
-See `../DEV-ACCESS.md`. Mongo's part: devs log in with their own `spec.users` user, never the system users, and the replica set needs member-name DNS through the tunnel.
+## Autopilot and pod security
 
-## Data lifetime
+### Why 500m CPU per pod?
 
-Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and the operator's own Secrets with the resource. Backups in GCS and the values in Secret Manager outlive it.
+Pod anti-affinity (one member per node) needs at least 500m, or GKE Warden rejects the StatefulSet. 3 × 500m / 1Gi is billed.
 
-The synced Secrets are owned by their SecretSync, and a GKE admission policy lets only Secret Sync and the garbage collector delete them. The finalizer's delete gets `Forbidden` and retries until kapp has deleted the SecretSyncs, which is why they have no "delete after" rule: that would deadlock.
+### The operator pod got preempted. Is that a problem?
+
+No. System pods (kube-dns) can preempt it while Autopilot adds nodes. It holds no state and resumes from the cluster.
+
+### Why is `runAsUser`/`fsGroup` 1001 repeated in `psmdb.yaml`?
+
+Setting `podSecurityContext` replaces the operator's defaults.
+
+### Why `env: HOME=/`?
+
+It's needed for `readOnlyRootFilesystem`. Without it, mongosh warns on stdout about `~/.mongodb`, the operator's primary check (stdout must be exactly `true`) fails, and the replset never initializes. Upstream #2594 (K8SPSMDB-1853).
+
+## Users and secrets
+
+### Which users exist?
+
+- System users, in `mongo-system-users` (`spec.secrets.users`): clusterAdmin, userAdmin, clusterMonitor, databaseAdmin, backup. These are the operator's own accounts. `internal-mongo-users` is the operator's copy.
+- App users, in `spec.users`: a password Secret per user, with roles scoped to the app's database. Removing an entry doesn't drop the user.
+
+### Where do the passwords and the encryption key come from?
+
+Secret Manager (`infra/static/secrets.tf`), copied into Kubernetes Secrets by GKE Secret Sync (`secretsync.yaml`). Every session gets the same key and passwords, so a backup restores into a new cluster.
+
+- Only passwords are synced. The operator adds the `MONGODB_*_USER` keys itself, and Secret Sync (server-side apply) leaves them alone.
+- App users get the same treatment later. The operator needs a real Kubernetes Secret, and the CSI add-on only mounts files.
+
+### Why must the Secrets exist before the cluster?
+
+Otherwise the operator generates its own random key and passwords, and Secret Sync can't take those Secrets over. So kapp creates `mongo/secrets` first and waits until both are synced (`kapp-config.yaml`).
+
+### How do I rotate a password?
+
+Bump its version in `infra/static`, then change `spec.forceSynchronization` on the SecretSync. The operator then changes it in mongod. Older backups still hold the old password.
+
+Never rotate the encryption key this way: the data and every physical backup are encrypted with it.
+
+### Why does the operator log `Forbidden` on teardown?
+
+A GKE admission policy lets only Secret Sync and the garbage collector delete synced Secrets. The finalizer's delete fails and retries until kapp has deleted the SecretSyncs and the garbage collector removes the Secrets. That's why the SecretSyncs have no "delete after" rule: it would deadlock.
+
+### How do devs log in?
+
+See `../DEV-ACCESS.md`. Devs use their own `spec.users` user, never the system users. The replica set needs member-name DNS through the tunnel.
 
 ## Backups
 
-PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data files from the shared volume and streams them, compressed, straight to GCS. Nothing is staged on disk.
+### How are backups taken?
 
-- Bucket `lab-gke-2610-mongo-backup` in `infra/static`, prefix `mongo`. Rotation: an hourly CronJob (`backup-cleanup.yaml`) execs into a backup-agent and runs PBM's own cleanup: PITR slices 48h, backups 7d. PBM never deletes part of a chain or the slices a kept backup needs, so it keeps at least that much. Neither PBM nor the operator schedules it. It only runs while the cluster is up; the first run of a session catches up. No lifecycle rule on `mongo/`: PBM's cleanup is the only rotation there. Run it now:
+PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data files and streams them, compressed, straight to GCS. Nothing is staged on disk.
 
-  ```sh
-  kubectl -n mongo create job --from=cronjob/backup-cleanup backup-cleanup-now
-  ```
-- Fulls for 90 days: PBM can only delete whole chains, so its 7-day cleanup takes each day's base with it. A second PBM storage would take a second full from mongod (more disk/network load on a member, holds PBM's one-operation lock, grows with data size). Instead a daily CronJob (`backup-copy.yaml`, 02:00 UTC) copies the newest finished base to `mongo-full/`: a GCS-side copy, no load on mongod. A base is a complete physical backup on its own; its `.pbm.json` has `type: incremental`, no `src_backup`, `status: done`. The script keeps the newest 90 there (`KEEP=90`; GCS lifecycle can't cap a count). It also deletes incomplete copies (data without `.pbm.json`, left by a failed copy or delete). The bucket has no lifecycle rules; all retention is in these CronJobs. Must stay outside `mongo/`: PBM lists its prefix recursively, so copies there would be imported and cleaned at 7 days. Run it now:
-
-  ```sh
-  kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
-  ```
-
-  Monthly: on the 1st, `backup-copy-monthly` copies the newest full from `mongo-full/` to `mongo-monthly/`. Kept forever (no lifecycle rule), in the bucket's default storage class. Same script (`backup-copy.py`), different `SRC`/`DST`:
-
-  ```sh
-  kubectl -n mongo create job --from=cronjob/backup-copy-monthly backup-copy-monthly-now
-  ```
-
-  Restore from a copy: suspend the cleanup (it would delete a copy older than 7 days), copy `<name>/` and then `<name>.pbm.json` back into `mongo/`, resync, restore by name, then resume the cleanup:
-
-  ```sh
-  kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'
-  gcloud storage cp -r gs://lab-gke-2610-mongo-backup/mongo-full/<name>   # or mongo-monthly/ gs://lab-gke-2610-mongo-backup/mongo/
-  gcloud storage cp gs://lab-gke-2610-mongo-backup/mongo-full/<name>.pbm.json gs://lab-gke-2610-mongo-backup/mongo/
-  kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm config --force-resync
-  # ... restore ...
-  kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":false}}'
-  ```
-- Later, for disaster recovery: today every copy is in one bucket, and the agents can delete all of it. Move the copies to a separate bucket (another region, ideally another project) with a retention lock, written by a create-only identity running outside the cluster. Monthlies typically get their own bucket with Archive as its default storage class (cheapest per GB, 365-day minimum, still online).
+- Bucket `lab-gke-2610-mongo-backup` (`infra/static`), prefix `mongo/`.
 - No keys: without `credentialsSecret`, PBM uses Workload Identity. The pods run as KSA `mongo`, which has `roles/storage.objectUser` on the bucket (`infra/dynamic/iam.tf`).
-- Strategy:
-  - daily `incremental-base` (full physical) at 00:00 UTC
-  - hourly `incremental` (changes since the previous backup in the chain)
-  - PITR: oplog slices every 10 min, so at most ~10 min of writes are lost.
-  - PBM has no differential backups.
-- Schedules only fire while the cluster is up, and a new cluster has no chain. Without a base the incrementals fail and PITR has nothing to replay onto. So every deploy takes one (`backup-base.yaml`), even a deploy with no changes. After a restore, deploy again for a new base:
 
-  ```sh
-  k8s/deploy.sh mongo
-  ```
+### What's the schedule?
 
-  The operator has no trigger for this (tasks are cron only), so kapp does it:
-  - `kapp.k14s.io/nonce` plus `update-strategy: always-replace`: the backup object is recreated on every deploy.
-  - `change-rule`: created only after the cluster's change group is done.
-  - `kapp-config.yaml` wait rules: the cluster is done when the operator has seen the new spec (`observedGeneration`), `state` is `ready`, and no `pendingSmartUpdate` is left. Without that wait, the backup would start while a rollout is pending and run first, because a smart update waits for running backups.
-  - `deploy.sh mongo` now blocks until the cluster is ready and the base is done. A failed base fails the deploy.
-- Restarts outside a deploy (node upgrades, evictions) aren't covered; the daily base catches them.
-- The chain lives on the node that took the base. If that member is gone, the next incremental fails until a new base. Why, and the open restart question: `backup-doc.md`.
-- Never `percona.com/delete-backup`. Scheduled backups get it unless `retention.deleteFromStorage: false`, and per-session teardown would then delete the files in GCS (or hang namespace deletion: the operator's fallback storage client ignores Workload Identity). `retention.count` only trims the Kubernetes objects.
-- Teardown, in this order:
+- Daily `incremental-base` (a full physical backup) at 00:00 UTC.
+- Hourly `incremental` (changes since the previous backup in the chain).
+- PITR: oplog slices every 10 min, so at most ~10 min of writes are lost.
+- PBM has no differential backups.
 
-  ```sh
-  k8s/destroy.sh mongo
-  kubectl -n mongo delete psmdb-backup --all   # GCS files stay
-  k8s/destroy.sh psmdb-operator
-  ```
+### Why does every deploy take a backup?
 
-  Every started backup carries the operator's `internal.percona.com/release-lock` finalizer, which only the operator removes. Left for the namespace deletion, they'd keep it Terminating once the operator is gone.
-- Restorable across sessions: a physical restore needs the same encryption key, and backups include the system users. Both come from Secret Manager (see Users).
+Schedules only fire while the cluster is up, and a new cluster has no chain. Without a base the incrementals fail and PITR has nothing to replay onto. So `backup-base.yaml` runs on every `deploy.sh mongo`, even one with no changes.
+
+The operator can't trigger that (tasks are cron only), so kapp does:
+
+- `kapp.k14s.io/nonce` plus `update-strategy: always-replace`: the backup object is recreated on every deploy.
+- `change-rule`: it's created only after the cluster's change group is done.
+- `kapp-config.yaml` wait rules: the cluster is done when the operator has seen the new spec (`observedGeneration`), `state` is `ready`, and no `pendingSmartUpdate` is left. Without that wait, the backup would run before a pending rollout, because a smart update waits for running backups.
+- So `deploy.sh mongo` blocks until the cluster is ready and the base is done. A failed base fails the deploy.
+
+### What about restarts outside a deploy?
+
+Node upgrades and evictions aren't covered; the daily base catches them. The chain lives on the node that took the base, so if that member is gone, the next incremental fails until a new base. Details and the open restart question: `backup-doc.md`.
+
+### How long are backups kept?
+
+| What | Where | Kept | By |
+|---|---|---|---|
+| PITR slices | `mongo/` | 48h | `backup-cleanup` (hourly :30) |
+| bases + incrementals | `mongo/` | 7 days | `backup-cleanup` |
+| daily fulls | `mongo-full/` | newest 90 | `backup-copy` (02:00 UTC) |
+| monthly fulls | `mongo-monthly/` | forever | `backup-copy-monthly` (1st, 03:00) |
+
+The bucket has no lifecycle rules; all retention lives in these CronJobs. They only run while the cluster is up, and the first run of a session catches up.
+
+### How does `backup-cleanup` work?
+
+It execs into a backup-agent and runs PBM's own cleanup. PBM never deletes part of a chain, or the slices a kept backup needs, so it keeps at least that much. Neither PBM nor the operator schedules it. Run it now:
+
+```sh
+kubectl -n mongo create job --from=cronjob/backup-cleanup backup-cleanup-now
+```
+
+### Why copy fulls instead of a second PBM storage?
+
+PBM only deletes whole chains, so its 7-day cleanup takes each day's base with it. A second PBM storage would take a second full from mongod: more disk and network load on a member, it holds PBM's one-operation lock, and it grows with data size. A GCS-side copy puts no load on mongod.
+
+`backup-copy` copies the newest finished base (`.pbm.json` with `type: incremental`, no `src_backup`, `status: done`) to `mongo-full/`. A base is a complete physical backup on its own. The script:
+
+- keeps the newest 90 (`KEEP=90`; GCS lifecycle can't cap a count)
+- deletes incomplete copies (data without `.pbm.json`)
+
+On the 1st, `backup-copy-monthly` runs the same script (`backup-copy.py`) from `mongo-full/` to `mongo-monthly/`, with no `KEEP`. Run them now:
+
+```sh
+kubectl -n mongo create job --from=cronjob/backup-copy backup-copy-now
+kubectl -n mongo create job --from=cronjob/backup-copy-monthly backup-copy-monthly-now
+```
+
+### Why can't the copies live under `mongo/`?
+
+PBM lists its prefix recursively, so it would import them and clean them at 7 days.
+
+### Why no `percona.com/delete-backup` finalizer?
+
+Per-session teardown would delete the files in GCS, or hang namespace deletion, because the operator's fallback storage client ignores Workload Identity. Scheduled backups get it unless `retention.deleteFromStorage: false`. `retention.count` only trims the Kubernetes objects.
+
+### Is this enough for disaster recovery?
+
+Not yet. Every copy sits in one bucket, and the agents can delete all of it. The next step: a separate bucket (another region, ideally another project) with a retention lock, written by a create-only identity outside the cluster. Monthlies typically get their own bucket with Archive as the default storage class (cheapest per GB, 365-day minimum, still online).
 
 ## Restore
 
-Never automatic: a new cluster starts empty. A restore is a deliberate choice of backup and point in time, and it stops the whole replset.
+### Does a new cluster restore automatically?
 
-`restore.yaml`, created by hand (outside kapp) into a running cluster:
+No, it starts empty. A restore is a deliberate choice of backup and point in time, and it stops the whole replset.
 
-- `backupSource` (a GCS path), not `backupName`: the backup's Kubernetes object went away with the session that took it.
-- The operator first checks the backup in GCS itself, as its own KSA. `infra/dynamic/iam.tf` gives it read access; the agents do the restore.
-- The operator turns PITR off during the restore. After it, the old chain doesn't continue: deploy again for a new base.
+### Can I restore into a brand-new, empty cluster?
 
-A new session's deploy writes an **empty** base and PITR range into the same `mongo/` prefix, so the newest backup and "latest" PITR are the empty cluster. Always pick a backup and time from before it.
+Yes. Same flow as any restore, because the key and system users come from Secret Manager. The cluster must be running first: a restore goes into a live cluster.
 
-`backup-cleanup` works against the newest backup, which is now the empty one. Its first run (:30) deletes the old session's PITR slices older than 48h and backups older than 7 days. Suspend it right after the deploy. The next deploy (step 4) resets `suspend`, since the manifest doesn't set it. Also, the 02:00 `backup-copy` copies the empty base into `mongo-full/`; it's harmless.
+### What's different in a new session?
 
-During the restore the operator adds a `pbm-init` init container with no resource requests, and it can't be set. Autopilot may adjust it (the `resource-adjustment` annotation) until the StatefulSet is put back.
+Two traps, both because `deploy.sh mongo` takes a base of the **empty** cluster into the same `mongo/` prefix:
+
+- The newest backup and "latest" PITR are the empty cluster. Pick a backup and time from **before** it.
+- `backup-cleanup` measures from the newest backup, now the empty one. Its first run (:30) deletes the old session's PITR slices older than 48h and backups older than 7 days. Suspend it right after the deploy.
+
+Also harmless: the 02:00 `backup-copy` copies the empty base into `mongo-full/`.
+
+### How do I restore?
 
 ```sh
 # 0. right after deploy.sh mongo, before :30
 kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'
 
-# 1. PBM lists every backup in mongo/, from all sessions, and the PITR ranges (UTC)
+# 1. every backup in mongo/ (all sessions) and the PITR ranges, in UTC
 kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm list
 
-# 2. a base or incremental taken before the target time, and a time inside a PITR range after it
+# 2. a backup taken before the target time, and a time inside a PITR range after it
 BACKUP=2026-10-28T00:00:21Z
 DATE="2026-10-28 10:15:00"
 sed -e "s/BACKUP_NAME/$BACKUP/" -e "s/PITR_DATE/$DATE/" k8s/mongo/restore.yaml | kubectl -n mongo create -f -
 
-# 3. wait for state ready (several minutes: pods stop, files download, oplog replays, pods restart)
+# 3. wait for ready (minutes: pods stop, files download, oplog replays, pods restart)
 kubectl -n mongo get psmdb-restore -w
 
 # 4. new base and PITR on the restored data; also unsuspends backup-cleanup
 k8s/deploy.sh mongo
 ```
 
-To restore from `mongo-full/` or `mongo-monthly/`, copy it back into `mongo/` first (Backups). PITR on top of an incremental hasn't been tried yet; if PBM refuses, use the chain's base.
+### Why does `restore.yaml` use a GCS path, not a backup name?
 
-Teardown: restores carry no finalizer; `kubectl -n mongo delete psmdb-restore --all` before destroying the operator keeps it tidy.
+`backupName` needs the backup's Kubernetes object, which went away with the session that took it. `backupSource` points straight at the files.
 
-### Drill
+### Why does the operator need bucket access too?
 
-Untested backups aren't backups. Run this once, and again after changing anything in backups, secrets or the operator version.
+Before restoring, the operator itself checks that the backup exists and is complete, as its own KSA `percona-server-mongodb-operator`. `infra/dynamic/iam.tf` gives it read-only access. The agents (KSA `mongo`) do the actual restore.
+
+### Why deploy again after a restore?
+
+The operator turns PITR off during the restore, and the old chain doesn't continue. The deploy takes a new base, so incrementals and PITR start over on the restored data.
+
+### Can I restore from `mongo-full/` or `mongo-monthly/`?
+
+Yes. Copy it back into `mongo/` first, then restore it by name:
+
+```sh
+kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'   # else it deletes copies older than 7 days
+gcloud storage cp -r gs://lab-gke-2610-mongo-backup/mongo-full/<name> gs://lab-gke-2610-mongo-backup/mongo/   # or mongo-monthly/
+gcloud storage cp gs://lab-gke-2610-mongo-backup/mongo-full/<name>.pbm.json gs://lab-gke-2610-mongo-backup/mongo/
+kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm config --force-resync
+# ... restore as above ...
+```
+
+Data first, `.pbm.json` last: PBM treats a backup as present once its metadata is.
+
+### Can I use PITR on top of an incremental?
+
+Not tried yet. If PBM refuses, use the chain's base.
+
+### I see a `resource-adjustment` annotation during the restore. Why?
+
+The operator adds a `pbm-init` init container with no resource requests, and we can't set them. Autopilot may adjust it until the StatefulSet is put back.
+
+### How do I know restore actually works?
+
+Run the drill once, and again after changing anything in backups, secrets or the operator version. Untested backups aren't backups.
 
 ```sh
 # password into mongosh through stdin, never on screen or in history
@@ -168,26 +272,28 @@ mongo_eval() {
 }
 ```
 
-1. Session A, after deploy (base done): write a marker, note the time.
+1. Session A, after the deploy (base done): write a marker, note the time.
 
    ```sh
    mongo_eval 'db.getSiblingDB("drill").marker.insertOne({at: new Date()})'
    date -u +"%Y-%m-%d %H:%M:%S"
    ```
 
-2. Wait until a PITR range in `pbm list` covers that time (slices every 10 min), then write a second marker that the restore must *not* bring back.
-3. Tear down fully: `destroy.sh mongo`, delete backups, `destroy.sh psmdb-operator`, `tofu destroy` dynamic.
-4. Session B: apply dynamic, deploy operator and mongo (new empty cluster), suspend `backup-cleanup`. `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
-5. Restore (above) with the session A base and the noted time. Watch `kubectl -n mongo get pods -w`: pods restart with `pbm-init`; a `FailedCreate` event means a pod-security or Autopilot rejection.
+2. Wait until a PITR range in `pbm list` covers that time, then write a second marker that the restore must *not* bring back.
+3. Tear down fully: the destroy order above, then `tofu destroy` dynamic.
+4. Session B: apply dynamic, deploy operator and mongo, suspend `backup-cleanup`. `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
+5. Restore with the session A backup and the noted time. Watch `kubectl -n mongo get pods -w`: pods restart with `pbm-init`. A `FailedCreate` event means a pod-security or Autopilot rejection.
 6. Check:
    - the first marker is back, the second isn't
    - `kubectl -n mongo get psmdb mongo` is `ready` (the operator logs in with Secret Manager's passwords, which match the restored users)
-   - the replset is the same data, encrypted with the same key: no "unable to decrypt" in `kubectl -n mongo logs mongo-rs0-0 -c mongod`
+   - no "unable to decrypt" in `kubectl -n mongo logs mongo-rs0-0 -c mongod` (same key)
 7. `k8s/deploy.sh mongo` for a new base; `pbm status` shows PITR running again.
 
-## Audit log (not enabled)
+## Audit log
 
-Percona Server feature. Tested against 8.0.32-14 in docker. Goes under `replsets[].configuration`; a change rolls the pods. Once on, it can only be turned off with a restart.
+### Is auditing on?
+
+No. It's tested against 8.0.32-14 in docker, but not enabled. It goes under `replsets[].configuration`; a change rolls the pods, and once on it can only be turned off with a restart.
 
 ```yaml
       configuration: |
@@ -210,5 +316,10 @@ Percona Server feature. Tested against 8.0.32-14 in docker. Goes under `replsets
           auditAuthorizationSuccess: true
 ```
 
-- Without `clientMetadata`/`logout` in the `$nin`, every probe and operator connection is logged.
-- Find audit lines in Cloud Logging with `jsonPayload.atype:*`.
+### Why exclude `clientMetadata` and `logout`?
+
+Without them in the `$nin`, every probe and operator connection is logged.
+
+### How do I find audit lines?
+
+In Cloud Logging, filter on `jsonPayload.atype:*`.
