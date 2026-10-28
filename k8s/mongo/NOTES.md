@@ -293,14 +293,11 @@ Yes. Same flow as any restore, because the key and system users come from Secret
 ### What's different in a new session?
 
 - Don't take a base before the restore. It would back up the **empty** cluster into the same `mongo/` prefix, and "newest" would mean empty. If the session runs past 00:00, `daily-base` does exactly that, so always pick the backup by time.
-- Suspend `backup-cleanup` right after the deploy. Its first run (:30) can delete the old session's PITR slices older than 48h and backups older than 7 days.
+- If the backup you need is older than 48h (PITR) or 7 days, `backup-cleanup` (:30) may delete it first; pause it then (`kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'`). Not part of the normal procedure.
 
 ### How do I restore?
 
 ```sh
-# 0. right after deploy.sh mongo, before :30
-kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'
-
 # 1. every backup in mongo/ (all sessions) and the PITR ranges, in UTC
 kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm list
 
@@ -312,10 +309,9 @@ sed -e "s/BACKUP_NAME/$BACKUP/" -e "s/PITR_DATE/$DATE/" k8s/mongo/restore.yaml |
 # 3. wait for ready (minutes: pods stop, files download, oplog replays, pods restart)
 kubectl -n mongo get psmdb-restore -w
 
-# 4. new base on the restored data (PITR resumes from it), then resume the cleanup
+# 4. new base on the restored data (PITR resumes from it)
 kubectl -n mongo create -f k8s/mongo/backup-base.yaml
 kubectl -n mongo get psmdb-backup -w   # until ready
-kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":false}}'
 ```
 
 ### Why does `restore.yaml` use a GCS path, not a backup name?
@@ -335,7 +331,6 @@ The operator turns PITR off during the restore, and the old chain doesn't contin
 Yes. Copy it back into `mongo/` first, then restore it by name:
 
 ```sh
-kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'   # else it deletes copies older than 7 days
 gcloud storage cp -r gs://lab-gke-2610-mongo-backup/mongo-full/<name> gs://lab-gke-2610-mongo-backup/mongo/   # or mongo-monthly/
 gcloud storage cp gs://lab-gke-2610-mongo-backup/mongo-full/<name>.pbm.json gs://lab-gke-2610-mongo-backup/mongo/
 kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm config --force-resync
@@ -375,13 +370,13 @@ mongo_eval() {
 
 2. Wait until a PITR range in `pbm list` covers that time, then write a second marker that the restore must *not* bring back.
 3. Tear down fully: the destroy order above, then `tofu destroy` dynamic.
-4. Session B: apply dynamic, deploy operator and mongo, suspend `backup-cleanup`. `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
+4. Session B: apply dynamic, deploy operator and mongo. `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
 5. Restore with the session A backup and the noted time. Watch `kubectl -n mongo get pods -w`: pods restart with `pbm-init`. A `FailedCreate` event means a pod-security or Autopilot rejection.
 6. Check:
    - the first marker is back, the second isn't
    - `kubectl -n mongo get psmdb mongo` is `ready` (the operator logs in with Secret Manager's passwords, which match the restored users)
    - no "unable to decrypt" in `kubectl -n mongo logs mongo-rs0-0 -c mongod` (same key)
-7. Take a base by hand and resume `backup-cleanup` (restore step 4); `pbm status` shows PITR running again.
+7. Take a base by hand (restore step 4); `pbm status` shows PITR running again.
 
 ## Audit log
 
