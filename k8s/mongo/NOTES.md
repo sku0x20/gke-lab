@@ -328,6 +328,22 @@ Before restoring, the operator itself checks that the backup exists and is compl
 
 The operator turns PITR off during the restore, and the old chain doesn't continue. A new base restarts incrementals and PITR on the restored data.
 
+### What happens to the old PITR after a restore?
+
+Nothing: it stays in GCS. It now describes the **old** history. After the restore point the database took a different path, but the old slices are still valid for restoring the old history (old base + old slices).
+
+There's no mix-up, because a restore picks slices by time and time only moves forward:
+
+| Restore target | Uses |
+|---|---|
+| inside the old range | old base + old slices |
+| between the old range and the new base | nothing: not restorable |
+| after the new base | new base + new slices |
+
+The new history writes with current timestamps, so the ranges never overlap. That's also why the new base after a restore is required.
+
+Normal rotation removes the old history later: `backup-cleanup` deletes its slices after 48h and its backups after 7 days. Copies in `mongo-full/` stay for their 90.
+
 ### Can I restore from `mongo-full/` or `mongo-monthly/`?
 
 Yes. Copy it back into `mongo/` first, then restore it by name:
