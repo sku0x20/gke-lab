@@ -32,11 +32,13 @@ spec:
     encryptionKey: mongo-mongodb-encryption-key
 
   # certificates from the operator (own CA per cluster, Secrets mongo-ssl / mongo-ssl-internal)
-  tls:
-    mode: requireTLS # no plain connections (default preferTLS accepts them)
-    # mongod checks the certificates it is shown (default true: anything passes).
-    # Clients without one are still let in: see allowConnectionsWithoutCertificates below
-    allowInvalidCertificates: false
+  # Off for now: clients outside the namespace can't get ca.crt yet (NOTES.md, TLS).
+  # Defaults meanwhile: preferTLS (plain connections accepted), allowInvalidCertificates true.
+  # Enable together with allowConnectionsWithoutCertificates below
+  # tls:
+  #   mode: requireTLS # no plain connections
+  #   # mongod checks the certificates it is shown (default true: anything passes)
+  #   allowInvalidCertificates: false
 
   # mongo-init copies the entrypoint into each pod; restricted needs these per container
   initContainerSecurityContext:
@@ -75,11 +77,12 @@ spec:
         - name: HOME
           value: /
       # no mTLS: clients log in with a password and only check mongod's certificate (ca.crt).
-      # Without this, allowInvalidCertificates: false makes mongod demand a client certificate
-      configuration: |
-        net:
-          tls:
-            allowConnectionsWithoutCertificates: true
+      # Without this, allowInvalidCertificates: false makes mongod demand a client certificate.
+      # Off with spec.tls above
+      # configuration: |
+      #   net:
+      #     tls:
+      #       allowConnectionsWithoutCertificates: true
       # Autopilot bills requests: 3 x 500m / 1Gi. 500m is Autopilot's minimum
       # for pods with anti-affinity; lower and GKE Warden rejects the StatefulSet
       resources:

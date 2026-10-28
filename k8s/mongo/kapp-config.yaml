@@ -28,7 +28,8 @@ waitRules:
     resourceMatchers:
       - apiVersionKindMatcher: {apiVersion: psmdb.percona.com/v1, kind: PerconaServerMongoDB}
 
-  # synced Secret: done once Secret Sync has written it. False is retried by the controller
+  # synced Secret: done once GKE's Secret Sync has created it (condition Create True, reason
+  # CreateSucceeded; it also reports Update). Any False is retried by the controller
   # (e.g. IAM not yet visible), so keep waiting; kapp's timeout ends a real failure
   - ytt:
       funcContractV1:
@@ -36,13 +37,17 @@ waitRules:
           def is_done(resource):
               status = getattr(resource, "status", None)
               conditions = getattr(status, "conditions", []) if status != None else []
+              created = False
               for c in conditions:
-                  if c.type == "SecretUpdated":
-                      if c.status == "True":
-                          return {"done": True, "successful": True, "message": c.reason}
-                      end
-                      return {"done": False, "successful": False, "message": c.reason + ": " + getattr(c, "message", "")}
+                  if c.status == "False":
+                      return {"done": False, "successful": False, "message": c.type + " " + c.reason + ": " + getattr(c, "message", "")}
                   end
+                  if c.type == "Create" and c.status == "True":
+                      created = True
+                  end
+              end
+              if created:
+                  return {"done": True, "successful": True, "message": "synced"}
               end
               return {"done": False, "successful": False, "message": "not synced yet"}
           end

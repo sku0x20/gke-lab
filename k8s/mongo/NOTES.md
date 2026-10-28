@@ -114,9 +114,18 @@ A GKE admission policy lets only Secret Sync and the garbage collector delete sy
 
 Both made by the operator: its own CA per cluster, so new every session. They never expire (valid until 9999).
 
-### Can a client connect without TLS?
+### Is TLS required?
 
-No. `tls.mode: requireTLS` (the default `preferTLS` accepts plain connections).
+Not yet. The strict settings are written but commented out in `psmdb.yaml` until clients can get `ca.crt` (below). Until then the operator's defaults apply:
+
+- `preferTLS`: mongod offers TLS but accepts plain connections.
+- `allowInvalidCertificates: true`: mongod doesn't check certificates shown to it.
+
+Member ↔ member traffic is TLS either way.
+
+### What does turning it on change?
+
+Uncomment both blocks in `psmdb.yaml` (`spec.tls` and `replsets[].configuration`) and deploy; the pods roll. Then clients must use TLS. It's not tested live yet.
 
 ### How does a client know it's really our mongo?
 
@@ -130,7 +139,7 @@ Only mongod holds the matching private key, so an impostor can't finish the hand
 
 ### Do apps need a client certificate?
 
-No mTLS. `allowConnectionsWithoutCertificates: true` (in `replsets[].configuration`) lets clients in without one; they need only `ca.crt` and a password. Because `allowInvalidCertificates: false`, a client that does show a certificate (the operator, PBM) must have a valid one.
+No mTLS. With the strict settings on, `allowConnectionsWithoutCertificates: true` (in `replsets[].configuration`) lets clients in without one; they need only `ca.crt` and a password. Because `allowInvalidCertificates: false`, a client that does show a certificate (the operator, PBM) must have a valid one.
 
 ### How do apps get `ca.crt`?
 
