@@ -6,6 +6,8 @@ namespace: mongo
 
 resources:
   - serviceaccount.yaml
+  - secretproviderclass.yaml
+  - secretsync.yaml
   - psmdb.yaml
   - backup-base.yaml
   - backup-cleanup.yaml

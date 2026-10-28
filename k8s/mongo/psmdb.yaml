@@ -5,11 +5,15 @@ metadata:
   annotations:
     # backup-base.yaml waits for this group; kapp-config.yaml says when it's done
     kapp.k14s.io/change-group: mongo/cluster
+    # the synced Secrets must exist first, or the operator generates its own (random key and
+    # passwords) and Secret Sync can't take them over. Create order only: a delete rule would
+    # deadlock with the finalizer below (secretsync.yaml)
+    kapp.k14s.io/change-rule: "upsert after upserting mongo/secrets"
   # run by the operator on delete, so destroy this app before psmdb-operator
   finalizers:
     - percona.com/delete-psmdb-pods-in-order # secondaries first, primary last
-    # data lives one session: also deletes StatefulSets, PVCs and the
-    # operator-generated secrets (users, keyfile, TLS, encryption key)
+    # data lives one session: also deletes StatefulSets, PVCs and the operator's secrets
+    # (keyfile, users copy). The synced ones are left to their SecretSync (secretsync.yaml)
     - percona.com/delete-psmdb-pvc
 spec:
   crVersion: 1.23.1 # must match the operator version
@@ -23,9 +27,11 @@ spec:
     setFCV: true
 
   secrets:
-    # system users (clusterAdmin, userAdmin, ...), not app users (spec.users);
-    # operator generates it if missing
+    # both synced from Secret Manager (secretsync.yaml), so a backup restores into a new cluster
+    # system users (clusterAdmin, userAdmin, ...), not app users (spec.users)
     users: mongo-system-users
+    # encryption at rest; the default name, spelled out to match secretsync.yaml
+    encryptionKey: mongo-mongodb-encryption-key
 
   # mongo-init copies the entrypoint into each pod; restricted needs these per container
   initContainerSecurityContext:

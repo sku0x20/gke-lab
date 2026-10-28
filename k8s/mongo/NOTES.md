@@ -35,9 +35,13 @@ A replica set needs `rs.initiate()`, a keyfile, member add/remove, users, TLS, a
 
 ## Users
 
-- `secrets.users: mongo-system-users`: the operator's own accounts (clusterAdmin, userAdmin, clusterMonitor, databaseAdmin, backup), generated if missing. Edit a password there to rotate it; `internal-mongo-users` is the operator's copy.
+- `secrets.users: mongo-system-users`: the operator's own accounts (clusterAdmin, userAdmin, clusterMonitor, databaseAdmin, backup). `internal-mongo-users` is the operator's copy.
+- That Secret and `mongo-mongodb-encryption-key` come from Secret Manager (`infra/static/secrets.tf`) through GKE Secret Sync (`secretsync.yaml`), so every session gets the same key and passwords and a backup restores into a new cluster.
+  - The synced Secrets must exist before the cluster resource. Otherwise the operator generates its own and Secret Sync can't take them over. kapp creates `mongo/secrets` first and waits until both are synced (`kapp-config.yaml`).
+  - Only passwords are synced; the operator adds the `MONGODB_*_USER` keys. Secret Sync writes with server-side apply, so it leaves those alone.
+  - Synced once, no rotation. To rotate a password, bump its version in `infra/static`, then change `spec.forceSynchronization` on the SecretSync; the operator then changes it in mongod. Older backups still hold the old password. Never rotate the encryption key this way: the data and every physical backup are encrypted with it.
 - App users: `spec.users`, a password Secret per user, roles scoped to the app's database. Removing an entry doesn't drop the user.
-- Passwords from Secret Manager (like valkey). Open question: the operator needs a real Kubernetes Secret, the add-on mounts files.
+- Passwords from Secret Manager through Secret Sync, like the system users (the operator needs a real Kubernetes Secret; the CSI add-on only mounts files).
 
 ## Dev access
 
@@ -45,7 +49,9 @@ See `../DEV-ACCESS.md`. Mongo's part: devs log in with their own `spec.users` us
 
 ## Data lifetime
 
-Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and the generated Secrets with the resource. Backups in GCS outlive it.
+Same as valkey: one session. `delete-psmdb-pvc` deletes StatefulSets, PVCs and the operator's own Secrets with the resource. Backups in GCS and the values in Secret Manager outlive it.
+
+The synced Secrets are owned by their SecretSync, and a GKE admission policy lets only Secret Sync and the garbage collector delete them. The finalizer's delete gets `Forbidden` and retries until kapp has deleted the SecretSyncs, which is why they have no "delete after" rule: that would deadlock.
 
 ## Backups
 
@@ -109,7 +115,7 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
 
   Every started backup carries the operator's `internal.percona.com/release-lock` finalizer, which only the operator removes. Left for the namespace deletion, they'd keep it Terminating once the operator is gone.
 - Restore into a new session uses `backupSource` (a GCS path), since the backup objects are gone. A physical restore stops the whole replset.
-- Not yet restorable across sessions: a physical restore needs the same encryption key (`mongo-mongodb-encryption-key`), and backups include the system users (`mongo-system-users`). Both are generated per session today. Next step: keep them in Secret Manager.
+- Restorable across sessions: a physical restore needs the same encryption key, and backups include the system users. Both come from Secret Manager (see Users).
 
 ## Audit log (not enabled)
 
