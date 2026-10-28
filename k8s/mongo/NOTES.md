@@ -160,7 +160,7 @@ Member ↔ member traffic is TLS either way.
 
 ### What does turning it on change?
 
-Uncomment both blocks in `psmdb.yaml` (`spec.tls` and `replsets[].configuration`) and deploy; the pods roll. Then clients must use TLS. It's not tested live yet.
+Uncomment `spec.tls` in `psmdb.yaml` and deploy; the pods roll. Then clients must use TLS. It's not tested live yet.
 
 ### How does a client know it's really our mongo?
 
@@ -174,7 +174,7 @@ Only mongod holds the matching private key, so an impostor can't finish the hand
 
 ### Do apps need a client certificate?
 
-No mTLS. With the strict settings on, `allowConnectionsWithoutCertificates: true` (in `replsets[].configuration`) lets clients in without one; they need only `ca.crt` and a password. Because `allowInvalidCertificates: false`, a client that does show a certificate (the operator, PBM) must have a valid one.
+No mTLS. `allowConnectionsWithoutCertificates: true` (in `replsets[].configuration`) lets TLS clients in without one; they need only `ca.crt` and a password. It's on even while TLS is optional: mongod has a CA file, and without this setting it rejects every TLS client that shows no certificate (`no SSL certificate provided by peer`; seen live). With `allowInvalidCertificates: false`, a client that does show a certificate (the operator, PBM) must have a valid one.
 
 ### How do apps get `ca.crt`?
 
