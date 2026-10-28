@@ -128,7 +128,14 @@ Never automatic: a new cluster starts empty. A restore is a deliberate choice of
 
 A new session's deploy writes an **empty** base and PITR range into the same `mongo/` prefix, so the newest backup and "latest" PITR are the empty cluster. Always pick a backup and time from before it.
 
+`backup-cleanup` works against the newest backup, which is now the empty one. Its first run (:30) deletes the old session's PITR slices older than 48h and backups older than 7 days. Suspend it right after the deploy. The next deploy (step 4) resets `suspend`, since the manifest doesn't set it. Also, the 02:00 `backup-copy` copies the empty base into `mongo-full/`; it's harmless.
+
+During the restore the operator adds a `pbm-init` init container with no resource requests, and it can't be set. Autopilot may adjust it (the `resource-adjustment` annotation) until the StatefulSet is put back.
+
 ```sh
+# 0. right after deploy.sh mongo, before :30
+kubectl -n mongo patch cronjob backup-cleanup -p '{"spec":{"suspend":true}}'
+
 # 1. PBM lists every backup in mongo/, from all sessions, and the PITR ranges (UTC)
 kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm list
 
@@ -140,7 +147,7 @@ sed -e "s/BACKUP_NAME/$BACKUP/" -e "s/PITR_DATE/$DATE/" k8s/mongo/restore.yaml |
 # 3. wait for state ready (several minutes: pods stop, files download, oplog replays, pods restart)
 kubectl -n mongo get psmdb-restore -w
 
-# 4. new base and PITR on the restored data
+# 4. new base and PITR on the restored data; also unsuspends backup-cleanup
 k8s/deploy.sh mongo
 ```
 
@@ -170,8 +177,8 @@ mongo_eval() {
 
 2. Wait until a PITR range in `pbm list` covers that time (slices every 10 min), then write a second marker that the restore must *not* bring back.
 3. Tear down fully: `destroy.sh mongo`, delete backups, `destroy.sh psmdb-operator`, `tofu destroy` dynamic.
-4. Session B: apply dynamic, deploy operator and mongo (new empty cluster). `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
-5. Restore (above) with the session A base and the noted time.
+4. Session B: apply dynamic, deploy operator and mongo (new empty cluster), suspend `backup-cleanup`. `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
+5. Restore (above) with the session A base and the noted time. Watch `kubectl -n mongo get pods -w`: pods restart with `pbm-init`; a `FailedCreate` event means a pod-security or Autopilot rejection.
 6. Check:
    - the first marker is back, the second isn't
    - `kubectl -n mongo get psmdb mongo` is `ready` (the operator logs in with Secret Manager's passwords, which match the restored users)

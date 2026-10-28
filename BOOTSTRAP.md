@@ -123,6 +123,8 @@ kubectl get pv                                                      # wait until
 tofu -chdir=infra/dynamic destroy                                   # end of each session
 ```
 
+Mongo starts empty each session; restoring a backup is a manual step (`k8s/mongo/NOTES.md`, Restore).
+
 `get-credentials` writes the cluster into `KUBECONFIG` (repo-local `.config/kube/config`). The cluster has only a DNS endpoint, so `--dns-endpoint` is required. Each new cluster gets a new endpoint, so rerun it after every dynamic apply.
 
 Destroying the cluster doesn't delete the disks behind PVCs; they'd be left behind, still billed. So delete every app with a PVC first and wait for its PV to go: the disk is deleted just after the PVC. Console: Compute Engine → Disks should show no `pvc-…` disks.
