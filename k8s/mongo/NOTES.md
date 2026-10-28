@@ -103,6 +103,39 @@ Never rotate the encryption key this way: the data and every physical backup are
 
 A GKE admission policy lets only Secret Sync and the garbage collector delete synced Secrets. The finalizer's delete fails and retries until kapp has deleted the SecretSyncs and the garbage collector removes the Secrets. That's why the SecretSyncs have no "delete after" rule: it would deadlock.
 
+## TLS
+
+### What is encrypted?
+
+| Connection | Certificate (Secret) |
+|---|---|
+| member ↔ member (replication, elections) | `mongo-ssl-internal`; members also prove who they are with it (x509 cluster auth) |
+| client → mongod (operator, PBM, apps, mongosh) | `mongo-ssl` |
+
+Both made by the operator: its own CA per cluster, so new every session. They never expire (valid until 9999).
+
+### Can a client connect without TLS?
+
+No. `tls.mode: requireTLS` (the default `preferTLS` accepts plain connections).
+
+### How does a client know it's really our mongo?
+
+During the TLS handshake mongod shows its certificate, and the client checks three things:
+
+1. It's signed by the CA the client trusts (`ca.crt`, passed with `tlsCAFile`).
+2. It's not expired.
+3. The hostname the client dialed is in the certificate (`mongo-rs0-N.mongo-rs0.mongo.svc.cluster.local`, `mongo-rs0.mongo...`, `localhost`).
+
+Only mongod holds the matching private key, so an impostor can't finish the handshake. Then the client logs in with its password inside the encrypted connection.
+
+### Do apps need a client certificate?
+
+No mTLS. `allowConnectionsWithoutCertificates: true` (in `replsets[].configuration`) lets clients in without one; they need only `ca.crt` and a password. Because `allowInvalidCertificates: false`, a client that does show a certificate (the operator, PBM) must have a valid one.
+
+### How do apps get `ca.crt`?
+
+Not solved yet; nothing outside the namespace connects. The CA changes every session and sits in Secret `mongo-ssl` in `mongo`, which other namespaces can't read. Plan when the first app or dev access comes: cert-manager with a stable CA (key in Secret Manager), and trust-manager copying `ca.crt` into each app namespace as a ConfigMap.
+
 ### How do devs log in?
 
 See `../DEV-ACCESS.md`. Devs use their own `spec.users` user, never the system users. The replica set needs member-name DNS through the tunnel.
@@ -284,6 +317,7 @@ Run the drill once, and again after changing anything in backups, secrets or the
 mongo_eval() {
   kubectl -n mongo get secret mongo-system-users -o jsonpath='{.data.MONGODB_DATABASE_ADMIN_PASSWORD}' | base64 -d |
     kubectl -n mongo exec -i mongo-rs0-0 -c mongod -- bash -c 'read -r PW; mongosh --quiet \
+      --tls --tlsCAFile /etc/mongodb-ssl/ca.crt \
       "mongodb://databaseAdmin:$PW@mongo-rs0.mongo.svc.cluster.local/admin?replicaSet=rs0" --eval "$1"' _ "$1"
 }
 ```

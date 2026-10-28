@@ -31,6 +31,13 @@ spec:
     # encryption at rest; the default name, spelled out to match secretsync.yaml
     encryptionKey: mongo-mongodb-encryption-key
 
+  # certificates from the operator (own CA per cluster, Secrets mongo-ssl / mongo-ssl-internal)
+  tls:
+    mode: requireTLS # no plain connections (default preferTLS accepts them)
+    # mongod checks the certificates it is shown (default true: anything passes).
+    # Clients without one are still let in: see allowConnectionsWithoutCertificates below
+    allowInvalidCertificates: false
+
   # mongo-init copies the entrypoint into each pod; restricted needs these per container
   initContainerSecurityContext:
     allowPrivilegeEscalation: false
@@ -67,6 +74,12 @@ spec:
       env:
         - name: HOME
           value: /
+      # no mTLS: clients log in with a password and only check mongod's certificate (ca.crt).
+      # Without this, allowInvalidCertificates: false makes mongod demand a client certificate
+      configuration: |
+        net:
+          tls:
+            allowConnectionsWithoutCertificates: true
       # Autopilot bills requests: 3 x 500m / 1Gi. 500m is Autopilot's minimum
       # for pods with anti-affinity; lower and GKE Warden rejects the StatefulSet
       resources:
