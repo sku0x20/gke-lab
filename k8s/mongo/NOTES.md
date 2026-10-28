@@ -298,7 +298,9 @@ Yes. Same flow as any restore, because the key and system users come from Secret
 ### How do I restore?
 
 ```sh
-# 1. every backup in mongo/ (all sessions) and the PITR ranges, in UTC
+# 1. a new cluster's PBM starts with an empty list: make it read the bucket, then list
+#    every backup in mongo/ (all sessions) and the PITR ranges, in UTC
+kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm config --force-resync --wait
 kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm list
 
 # 2. a backup taken before the target time, and a time inside a PITR range after it
