@@ -114,8 +114,69 @@ PBM, physical only. A `backup-agent` sidecar in each mongod pod reads the data f
   ```
 
   Every started backup carries the operator's `internal.percona.com/release-lock` finalizer, which only the operator removes. Left for the namespace deletion, they'd keep it Terminating once the operator is gone.
-- Restore into a new session uses `backupSource` (a GCS path), since the backup objects are gone. A physical restore stops the whole replset.
 - Restorable across sessions: a physical restore needs the same encryption key, and backups include the system users. Both come from Secret Manager (see Users).
+
+## Restore
+
+Never automatic: a new cluster starts empty. A restore is a deliberate choice of backup and point in time, and it stops the whole replset.
+
+`restore.yaml`, created by hand (outside kapp) into a running cluster:
+
+- `backupSource` (a GCS path), not `backupName`: the backup's Kubernetes object went away with the session that took it.
+- The operator first checks the backup in GCS itself, as its own KSA. `infra/dynamic/iam.tf` gives it read access; the agents do the restore.
+- The operator turns PITR off during the restore. After it, the old chain doesn't continue: deploy again for a new base.
+
+A new session's deploy writes an **empty** base and PITR range into the same `mongo/` prefix, so the newest backup and "latest" PITR are the empty cluster. Always pick a backup and time from before it.
+
+```sh
+# 1. PBM lists every backup in mongo/, from all sessions, and the PITR ranges (UTC)
+kubectl -n mongo exec statefulset/mongo-rs0 -c backup-agent -- pbm list
+
+# 2. a base or incremental taken before the target time, and a time inside a PITR range after it
+BACKUP=2026-10-28T00:00:21Z
+DATE="2026-10-28 10:15:00"
+sed -e "s/BACKUP_NAME/$BACKUP/" -e "s/PITR_DATE/$DATE/" k8s/mongo/restore.yaml | kubectl -n mongo create -f -
+
+# 3. wait for state ready (several minutes: pods stop, files download, oplog replays, pods restart)
+kubectl -n mongo get psmdb-restore -w
+
+# 4. new base and PITR on the restored data
+k8s/deploy.sh mongo
+```
+
+To restore from `mongo-full/` or `mongo-monthly/`, copy it back into `mongo/` first (Backups). PITR on top of an incremental hasn't been tried yet; if PBM refuses, use the chain's base.
+
+Teardown: restores carry no finalizer; `kubectl -n mongo delete psmdb-restore --all` before destroying the operator keeps it tidy.
+
+### Drill
+
+Untested backups aren't backups. Run this once, and again after changing anything in backups, secrets or the operator version.
+
+```sh
+# password into mongosh through stdin, never on screen or in history
+mongo_eval() {
+  kubectl -n mongo get secret mongo-system-users -o jsonpath='{.data.MONGODB_DATABASE_ADMIN_PASSWORD}' | base64 -d |
+    kubectl -n mongo exec -i mongo-rs0-0 -c mongod -- bash -c 'read -r PW; mongosh --quiet \
+      "mongodb://databaseAdmin:$PW@mongo-rs0.mongo.svc.cluster.local/admin?replicaSet=rs0" --eval "$1"' _ "$1"
+}
+```
+
+1. Session A, after deploy (base done): write a marker, note the time.
+
+   ```sh
+   mongo_eval 'db.getSiblingDB("drill").marker.insertOne({at: new Date()})'
+   date -u +"%Y-%m-%d %H:%M:%S"
+   ```
+
+2. Wait until a PITR range in `pbm list` covers that time (slices every 10 min), then write a second marker that the restore must *not* bring back.
+3. Tear down fully: `destroy.sh mongo`, delete backups, `destroy.sh psmdb-operator`, `tofu destroy` dynamic.
+4. Session B: apply dynamic, deploy operator and mongo (new empty cluster). `mongo_eval 'db.getSiblingDB("drill").marker.find()'` shows nothing.
+5. Restore (above) with the session A base and the noted time.
+6. Check:
+   - the first marker is back, the second isn't
+   - `kubectl -n mongo get psmdb mongo` is `ready` (the operator logs in with Secret Manager's passwords, which match the restored users)
+   - the replset is the same data, encrypted with the same key: no "unable to decrypt" in `kubectl -n mongo logs mongo-rs0-0 -c mongod`
+7. `k8s/deploy.sh mongo` for a new base; `pbm status` shows PITR running again.
 
 ## Audit log (not enabled)
 

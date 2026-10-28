@@ -1,0 +1,24 @@
+# Restore a backup from GCS into the running cluster, then replay the oplog up to PITR_DATE.
+# Not in kustomization.yaml: a restore is a one-off, created by hand with the two values filled in
+# (NOTES.md, Restore):
+#   sed -e "s/BACKUP_NAME/$BACKUP/" -e "s/PITR_DATE/$DATE/" k8s/mongo/restore.yaml | kubectl -n mongo create -f -
+# Physical: the operator stops every mongod, PBM writes the files, then the pods restart.
+# Writes made after the restore starts are lost.
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBRestore
+metadata:
+  generateName: restore-
+spec:
+  clusterName: mongo
+  # backupSource, not backupName: backupName needs the backup's Kubernetes object,
+  # which went away with the session that took it
+  backupSource:
+    type: incremental # PBM's type for both our bases and incrementals (pbm list)
+    destination: gs://lab-gke-2610-mongo-backup/mongo/BACKUP_NAME
+    # same bucket and prefix as psmdb.yaml storage "gcs"; no credentialsSecret = Workload Identity
+    gcs:
+      bucket: lab-gke-2610-mongo-backup
+      prefix: mongo
+  pitr:
+    type: date
+    date: "PITR_DATE" # UTC, YYYY-MM-DD HH:MM:SS; after the backup, inside a PITR range (pbm list)
