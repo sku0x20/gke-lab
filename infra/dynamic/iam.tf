@@ -22,6 +22,14 @@ resource "google_storage_bucket_iam_member" "mongo_backup" {
   member = "${local.k8s_principal}/ns/mongo/sa/mongo"
 }
 
+# The operator itself checks a backup in the bucket before restoring it (metadata and file list),
+# with Workload Identity as its own KSA. Read-only: PBM agents do the restore
+resource "google_storage_bucket_iam_member" "mongo_backup_operator" {
+  bucket = data.google_storage_bucket.mongo_backup.name
+  role   = "roles/storage.objectViewer"
+  member = "${local.k8s_principal}/ns/mongo/sa/percona-server-mongodb-operator"
+}
+
 # Secret Sync reads mongo's secrets as KSA mongo (SecretSync spec.serviceAccountName)
 resource "google_secret_manager_secret_iam_member" "mongo" {
   for_each  = data.google_secret_manager_secret.mongo
