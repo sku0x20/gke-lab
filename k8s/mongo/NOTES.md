@@ -345,13 +345,15 @@ Data first, `.pbm.json` last: PBM treats a backup as present once its metadata i
 
 Not tried yet. If PBM refuses, use the chain's base.
 
-### I see a `resource-adjustment` annotation during the restore. Why?
+### What about `pbm-init`'s resources during a restore?
 
-The operator adds a `pbm-init` init container with no resource requests, and we can't set them. Autopilot may adjust it until the StatefulSet is put back.
+The operator adds a `pbm-init` init container with no resource requests, and we can't set them. Autopilot fills in its defaults (500m / 1Gi, seen live), with no `resource-adjustment` annotation. Init containers run before mongod, so the pod is billed the larger of the two: mongod's same 500m / 1Gi. Nothing extra.
 
 ### How do I know restore actually works?
 
 Run the drill once, and again after changing anything in backups, secrets or the operator version. Untested backups aren't backups.
+
+Last run: 2026-10-28, passed (fresh mongo on the same GKE cluster; base + PITR to a time between the two markers, about 5 minutes for an empty database).
 
 ```sh
 # password into mongosh through stdin, never on screen or in history
