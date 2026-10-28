@@ -146,10 +146,10 @@ Take one:
 
 ### Can I take an incremental by hand too?
 
-Yes, same file with the type swapped. It needs a base in the current chain, or it fails.
+Yes. It needs a base in the current chain, or it fails.
 
 ```sh
-sed -e 's/incremental-base/incremental/' -e 's/base-/inc-/' k8s/mongo/backup-base.yaml | kubectl -n mongo create -f -
+kubectl -n mongo create -f k8s/mongo/backup-incremental.yaml
 ```
 
 ### What about restarts?

@@ -1,0 +1,13 @@
+# On-demand incremental: changes since the previous backup in the chain.
+# Needs a base in the current chain (backup-base.yaml or the daily one), or it fails.
+# Not in kustomization.yaml: taken by hand:
+#   kubectl -n mongo create -f k8s/mongo/backup-incremental.yaml
+# no percona.com/delete-backup finalizer: deleting this object must not delete the files in GCS
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDBBackup
+metadata:
+  generateName: inc- # a new object each time
+spec:
+  clusterName: mongo
+  storageName: gcs
+  type: incremental
