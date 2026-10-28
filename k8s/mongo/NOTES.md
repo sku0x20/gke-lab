@@ -144,6 +144,14 @@ Take one:
 - after a restore
 - after a rollout or a member loss (see below)
 
+### Can I take an incremental by hand too?
+
+Yes, same file with the type swapped. It needs a base in the current chain, or it fails.
+
+```sh
+sed -e 's/incremental-base/incremental/' -e 's/base-/inc-/' k8s/mongo/backup-base.yaml | kubectl -n mongo create -f -
+```
+
 ### What about restarts?
 
 The chain lives on the node that took the base. If that member restarts or is gone, the next incremental may fail until a new base. The daily base catches it, or take one by hand. Details and the open restart question: `backup-doc.md`.
