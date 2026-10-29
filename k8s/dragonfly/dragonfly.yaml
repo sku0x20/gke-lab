@@ -1,0 +1,52 @@
+# the operator turns this into a StatefulSet (pods dragonfly-0, -1), Services and a PDB.
+# Service dragonfly points at the master; the operator moves it on failover
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  name: dragonfly
+spec:
+  # one master + one replica
+  replicas: 2
+  # pinned, so an operator upgrade doesn't also upgrade Dragonfly (its default = the
+  # version it was built with). Upgrade = bump the tag; the operator rolls replica first
+  image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.2
+  imagePullPolicy: IfNotPresent
+  args:
+    # Dragonfly starts one thread per node core when there's no CPU limit, and exits if
+    # maxmemory < 256 MiB per thread. Pinned, so a bigger node doesn't crash the pod
+    - --proactor_threads=2
+  # Autopilot bills requests. Memory limit = request: Dragonfly sizes maxmemory from it.
+  # no CPU limit
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      memory: 1Gi
+  # restricted Pod Security. The image starts as root and drops to dfly (999) itself;
+  # here it starts as 999, so the entrypoint skips that. Setting this replaces the
+  # operator's default (fsGroup 999 only)
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+  # master and replica on different nodes; see NOTES.md for minDomains
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      minDomains: 2
+      # no matchLabelKeys: the operator rolls one pod at a time, so the new pod must
+      # count the old one still running, or it can land on the same node
+      labelSelector:
+        matchLabels:
+          app: dragonfly # operator sets app=<Dragonfly name> on its pods
