@@ -5,8 +5,9 @@ kind: Dragonfly
 metadata:
   name: dragonfly
 spec:
-  # one master + one replica
-  replicas: 2
+  # one master + two replicas. On failover the operator promotes the replica
+  # with the highest replication offset, and one replica is still left
+  replicas: 3
   # pinned, so an operator upgrade doesn't also upgrade Dragonfly (its default = the
   # version it was built with). Upgrade = bump the tag; the operator rolls replica first
   image: docker.dragonflydb.io/dragonflydb/dragonfly:v2.0.2
@@ -19,7 +20,7 @@ spec:
   # no CPU limit
   resources:
     requests:
-      cpu: 250m
+      cpu: 500m # Autopilot minimum with pod anti-affinity
       memory: 1Gi
     limits:
       memory: 1Gi
@@ -39,14 +40,12 @@ spec:
     capabilities:
       drop:
         - ALL
-  # master and replica on different nodes; see NOTES.md for minDomains
-  topologySpreadConstraints:
-    - maxSkew: 1
-      topologyKey: kubernetes.io/hostname
-      whenUnsatisfiable: DoNotSchedule
-      minDomains: 2
-      # no matchLabelKeys: the operator rolls one pod at a time, so the new pod must
-      # count the old one still running, or it can land on the same node
-      labelSelector:
-        matchLabels:
-          app: dragonfly # operator sets app=<Dragonfly name> on its pods
+  # strictly one pod per node: a node failure takes at most one of them.
+  # Autopilot adds nodes as needed
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app: dragonfly # operator sets app=<Dragonfly name> on its pods
