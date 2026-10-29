@@ -14,6 +14,17 @@ spec:
     spec:
       # upstream arch affinity (incl. ppc64le, s390x); Autopilot picks the node
       affinity: null
+      # the two replicas on different nodes, so one node failure can't take
+      # both. pod-template-hash: count only pods of the same rollout
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              control-plane: controller-manager
+          matchLabelKeys:
+            - pod-template-hash
       # restricted Pod Security; both images run as numeric USER 65532
       securityContext:
         runAsNonRoot: true
