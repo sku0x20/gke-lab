@@ -9,7 +9,7 @@ Dragonfly (Redis-compatible), run by the Dragonfly operator.
 Two kapp apps:
 
 - `dragonfly-operator`: the CRD, RBAC, the operator Deployment, and the `dragonfly-operator-system` namespace.
-- `dragonfly`: one `Dragonfly` resource (not written yet). The operator creates the StatefulSet, Services and PDB.
+- `dragonfly`: the `dragonfly` namespace and one `Dragonfly` resource. The operator creates the StatefulSet, Services and PDB.
 
 ### Why Dragonfly next to valkey?
 
@@ -110,6 +110,32 @@ Spread only counts nodes that exist. On 1 node, that node is also the emptiest, 
 ### Why `matchLabelKeys: pod-template-hash`?
 
 So only pods of the same rollout are counted. Otherwise old and new pods are counted together during a rollout, and the new ones land unevenly and stay that way.
+
+## Dragonfly pods
+
+### Why three pods?
+
+One master, two replicas. On failover the operator promotes the replica with the highest replication offset (the most data received), and one replica is still left for the next failure. With one replica, losing it leaves the master alone until the new pod has synced.
+
+More replicas don't make writes safer: replication is still async. The `dragonfly` Service points at the master only, so they add no read capacity either.
+
+### Why anti-affinity here and spread for the operator?
+
+Strictly one pod per node, so a node failure takes at most one. That's the anti-affinity case. It costs the Autopilot minimum of 500m CPU per pod (1500m billed for three); Dragonfly's two threads use it.
+
+The operator pods are stateless and cheap to lose, so spread at 120m is enough there.
+
+### Why pin the image?
+
+The operator's default is the Dragonfly version it was built with, so an operator upgrade would also upgrade the data store. Pinned, they upgrade separately. The operator rolls replicas first, then hands the master role to an updated replica.
+
+### Why `--proactor_threads=2`?
+
+With no CPU limit, Dragonfly starts one thread per node core, and it exits if `maxmemory` is under 256 MiB per thread. `maxmemory` comes from the 1Gi memory limit, so a node with 5+ cores would crash the pod. Pinned, node size doesn't matter.
+
+### Why run as user 999?
+
+Restricted Pod Security rejects root. The image starts as root and drops to `dfly` (999) in its entrypoint; started as 999, the entrypoint skips that step. Setting `podSecurityContext` replaces the operator's default (`fsGroup: 999` only), so all of it is set.
 
 ## Autopilot and pod security
 
