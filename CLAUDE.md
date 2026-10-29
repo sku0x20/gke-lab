@@ -4,6 +4,11 @@
 
 - Commit after every meaningful change.
 
+## Notes
+
+- Write notes (`k8s/<app>/NOTES.md`) as a FAQ: `##` topics, `###` questions, short direct answers with the why. Commands where they belong. `k8s/mongo/NOTES.md` is the reference.
+- Crisp: no URLs, no filler. Console references as menu paths.
+
 ## Secrets in OpenTofu
 
 - Mark secret variables/outputs `sensitive = true`. Still plaintext in state, so also:
