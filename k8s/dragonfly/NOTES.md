@@ -164,6 +164,18 @@ With no CPU limit, Dragonfly starts one thread per node core, and it exits if `m
 
 Restricted Pod Security rejects root. The image starts as root and drops to `dfly` (999) in its entrypoint; started as 999, the entrypoint skips that step. Setting `podSecurityContext` replaces the operator's default (`fsGroup: 999` only), so all of it is set.
 
+### Why no PVC, unlike valkey?
+
+The second copy is the replicas' memory, not a disk. Valkey runs one pod, so its disk (AOF) is the only copy.
+
+- Replica restarts: full sync from the master over the network.
+- Master restarts: the operator promotes a replica; the old master comes back as a replica and syncs.
+- Dragonfly has no AOF, so a disk could only hold snapshots. GCS is better for those: it outlives a zone and the cluster, and a fresh pod loads from it with no disk to reattach.
+
+The cost: all three pods down at once (bad rollout, cluster gone) loses every write since the last snapshot. The snapshot interval is the recovery point for that case.
+
+The operator adds a PVC only with `snapshot.persistentVolumeClaimSpec` or `tiering.persistentVolumeClaimSpec`. We set neither, so nothing in the pod survives a restart.
+
 ### How do I know all pods are up?
 
 Not from `status.phase`: it turns `Ready` once the master runs, before the replicas exist (seen live). kapp doesn't wait either, the resource has no conditions. Wait on the StatefulSet:
