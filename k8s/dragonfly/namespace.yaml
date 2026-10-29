@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dragonfly
+  labels:
+    # reject pods that don't meet the restricted Pod Security Standard
+    pod-security.kubernetes.io/enforce: restricted
