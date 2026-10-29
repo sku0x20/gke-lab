@@ -164,6 +164,19 @@ With no CPU limit, Dragonfly starts one thread per node core, and it exits if `m
 
 Restricted Pod Security rejects root. The image starts as root and drops to `dfly` (999) in its entrypoint; started as 999, the entrypoint skips that step. Setting `podSecurityContext` replaces the operator's default (`fsGroup: 999` only), so all of it is set.
 
+### How do I know all pods are up?
+
+Not from `status.phase`: it turns `Ready` once the master runs, before the replicas exist (seen live). kapp doesn't wait either, the resource has no conditions. Wait on the StatefulSet:
+
+```sh
+kubectl -n dragonfly wait sts/dragonfly --for=jsonpath='{.status.readyReplicas}'=3
+kubectl -n dragonfly exec dragonfly-0 -- redis-cli info replication   # on the master: connected_slaves:2, state=online
+```
+
+### What are the "Replication error: ExecutionState cancelled" lines?
+
+Harmless, one on the master per replica joining. The operator sends `REPLICAOF` twice about 160 ms apart, so the replica drops its first full sync and starts another (seen in the replica log). Empty, that's milliseconds. With GBs of data, every replica start copies the dataset twice.
+
 ## Autopilot and pod security
 
 ### Why change the upstream requests?
