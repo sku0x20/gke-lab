@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# cluster-wide operator: watches Dragonfly resources in every namespace,
+# so the dragonfly app gets its own namespace. Upstream namespace name kept
+resources:
+  # upstream all-in-one manifest (namespace, CRD, RBAC, Deployment), pinned to
+  # a release tag; upgrade = bump the tag. ~480 KB, kept out of the repo
+  - https://raw.githubusercontent.com/dragonflydb/dragonfly-operator/v1.7.1/manifests/dragonfly-operator.yaml
+  - pdb.yaml
+
+patches:
+  - path: crds.patch.yaml
+    target:
+      kind: CustomResourceDefinition
+  - path: namespace.patch.yaml
+  - path: operator.patch.yaml

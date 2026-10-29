@@ -1,0 +1,39 @@
+# upstream requests total 15m CPU per pod, under the Autopilot minimum
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dragonfly-operator-controller-manager
+  namespace: dragonfly-operator-system
+spec:
+  # the operator does the Dragonfly failover (no Sentinel). A node drain that
+  # takes the operator and the Dragonfly master together would stall promotion
+  # until the operator reschedules; a second replica (leader election) and the
+  # PDB keep one running
+  replicas: 2
+  template:
+    spec:
+      # upstream arch affinity (incl. ppc64le, s390x); Autopilot picks the node
+      affinity: null
+      # restricted Pod Security; both images run as numeric USER 65532
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        # metrics endpoint auth proxy; scraped later via a PodMonitoring
+        - name: kube-rbac-proxy
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: null
+              memory: 64Mi
+        - name: manager
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: null
+              memory: 256Mi

@@ -1,0 +1,11 @@
+# node drains (Autopilot upgrades) evict one operator pod at a time
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: dragonfly-operator
+  namespace: dragonfly-operator-system
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
