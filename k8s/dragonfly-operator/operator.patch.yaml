@@ -45,6 +45,13 @@ spec:
               cpu: null
               memory: 64Mi
         - name: manager
+          # watch only its own namespace; RBAC grants it nothing elsewhere.
+          # Not --watch-current-namespace: that reads a kubeconfig, which pods don't have
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           resources:
             requests:
               cpu: 100m
