@@ -3,6 +3,7 @@
 ## Workflow
 
 - Commit after every meaningful change.
+- Scratch space is `tmp/` in this repo (gitignored): downloaded upstream sources, rendered manifests, test files. Not the system temp dir.
 
 ## Notes
 
