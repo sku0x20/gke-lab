@@ -8,8 +8,18 @@ Dragonfly (Redis-compatible), run by the Dragonfly operator.
 
 Two kapp apps:
 
-- `dragonfly-operator`: the CRD, RBAC, the operator Deployment, and the `dragonfly-operator-system` namespace.
-- `dragonfly`: the `dragonfly` namespace and one `Dragonfly` resource. The operator creates the StatefulSet, Services and PDB.
+- `dragonfly-operator`: the `dragonfly` namespace, the CRD, RBAC and the operator Deployment.
+- `dragonfly`: one `Dragonfly` resource in that namespace. The operator creates the StatefulSet, Services and PDB.
+
+Same split as `psmdb-operator` and `mongo`.
+
+### One shared instance or one per app?
+
+One shared, highly available instance, like mongo. For sessions, queues and shared state that must survive a node failure without downtime. An app that wants a cache or something private gets its own valkey (cheap, no HA).
+
+Per-app Dragonfly doesn't pay off: with HA each instance is 3 pods (1.5 CPU billed). Dragonfly's threads also remove valkey's main reason to split (one slow command blocking everyone).
+
+Eviction is still instance-wide: this one never evicts. A workload that needs both eviction and HA gets a second `Dragonfly`, and the operator is granted its namespace explicitly.
 
 ### Why Dragonfly next to valkey?
 
@@ -33,15 +43,32 @@ Sentinel only promotes. It doesn't know about Kubernetes: a Service can't follow
 
 ### In what order do I deploy and destroy?
 
-Deploy `dragonfly-operator`, then `dragonfly`. Destroy in reverse. Deleting `dragonfly-operator` deletes the CRD, and with it every `Dragonfly` resource in the cluster.
+Deploy `dragonfly-operator`, then `dragonfly`: the namespace comes with the operator. Destroy in reverse. Deleting `dragonfly-operator` deletes the namespace and the CRD, and with them the `Dragonfly` resource and its pods.
 
 ## Operator
 
 ### How is the operator set up?
 
-- Cluster-wide: it watches `Dragonfly` resources in every namespace. Upstream namespace name kept.
-- Upstream all-in-one manifest by URL, pinned to a release tag.
+- Namespaced: it watches only `dragonfly` and has rights only there.
+- Upstream all-in-one manifest by URL, pinned to a release tag, moved into `dragonfly` by kustomize.
 - Restricted Pod Security on its namespace. Both images run as numeric user 65532, so `runAsNonRoot` passes.
+
+### Why namespaced?
+
+Upstream binds its role cluster-wide: create and delete on pods, Services, ConfigMaps, StatefulSets and PDBs in every namespace. A bug there could delete mongo's StatefulSet. One shared instance needs one namespace.
+
+- `WATCH_NAMESPACE` from the pod's own namespace: the operator lists and watches only there. Not `--watch-current-namespace`: it reads a kubeconfig, which pods don't have.
+- `rolebinding.yaml` binds upstream's ClusterRole with a RoleBinding: same rules, this namespace only. Upstream's ClusterRoleBinding is deleted by a patch, which fails the build if upstream renames it.
+- kube-rbac-proxy keeps its ClusterRoleBinding: TokenReviews and SubjectAccessReviews are cluster-scoped APIs.
+- The CRD is cluster-scoped regardless.
+
+```sh
+kubectl auth can-i delete statefulsets -n mongo --as=system:serviceaccount:dragonfly:dragonfly-operator-controller-manager  # no
+```
+
+### Why do the patches still say `dragonfly-operator-system`?
+
+Kustomize matches patches against the upstream names, before `namespace:` moves the objects. With `dragonfly` in the patch, the build fails with "no resource matches".
 
 ### How do I upgrade the operator?
 
@@ -62,7 +89,7 @@ The operator does the Dragonfly failover. With one pod, a node failure that take
 Through a Lease (`31079dea.dragonflydb.io`), a lock with an expiry. Both pods run, but only the Lease holder runs the controllers and renews the Lease every few seconds. The other one waits. When the leader stops renewing, the standby takes the Lease after `leaseDurationSeconds: 15` and reads the state fresh from the cluster.
 
 ```sh
-kubectl -n dragonfly-operator-system get lease -o custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions
+kubectl -n dragonfly get lease -o custom-columns=HOLDER:.spec.holderIdentity,TRANSITIONS:.spec.leaseTransitions
 ```
 
 ### How long does a handover take?
