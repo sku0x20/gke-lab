@@ -20,6 +20,10 @@ spec:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: DoNotSchedule
+          # spread only counts existing nodes: on a 1-node cluster both pods
+          # fit "evenly" (seen live). With fewer than 2 nodes the second pod
+          # stays Pending and Autopilot adds a node
+          minDomains: 2
           labelSelector:
             matchLabels:
               control-plane: controller-manager
