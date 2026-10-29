@@ -97,9 +97,15 @@ Spreading your own replicas evenly: spread.
 
 Keep operator pods (`labelSelector`) evenly across nodes (`topologyKey: hostname`), off by at most 1 (`maxSkew: 1`). Assume at least 2 nodes (`minDomains: 2`). If that can't be met, stay Pending (`DoNotSchedule`), which makes Autopilot add a node.
 
+### How is "evenly" checked?
+
+Per candidate node: `skew = matching pods on it after placing − minimum`. Allowed if `skew ≤ maxSkew`.
+
+The minimum is the fewest matching pods on any eligible node, before placing. Eligible: passes the pod's nodeSelector/nodeAffinity. Matching: `labelSelector` plus same `pod-template-hash`. With A: 2, B: 1, C: 0 the minimum is 0, so only C (skew 1) is allowed. A node can sit at most `maxSkew` above the emptiest one.
+
 ### Why `minDomains: 2`?
 
-Spread only counts nodes that exist. On a 1-node cluster both pods fit "evenly" on one node (seen live). With `minDomains: 2` a missing node counts as 0 pods, so the second pod waits for a new node.
+Spread only counts nodes that exist. On 1 node, that node is also the emptiest, so the minimum rises with every pod and skew stays 0: both pods fit "evenly" on one node (seen live). With fewer than `minDomains` nodes, the minimum is taken as 0. The second pod would make skew 2, so it waits for a new node.
 
 ### Why `matchLabelKeys: pod-template-hash`?
 
