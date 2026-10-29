@@ -12,6 +12,7 @@ resources:
   # a release tag; upgrade = bump the tag. ~480 KB, kept out of the repo
   - https://raw.githubusercontent.com/dragonflydb/dragonfly-operator/v1.7.1/manifests/dragonfly-operator.yaml
   - pdb.yaml
+  - rolebinding.yaml
 
 patches:
   - path: crds.patch.yaml
@@ -19,3 +20,12 @@ patches:
       kind: CustomResourceDefinition
   - path: namespace.patch.yaml
   - path: operator.patch.yaml
+  # cluster-wide rights for the manager; rolebinding.yaml grants them in this
+  # namespace only. kube-rbac-proxy's ClusterRoleBinding stays: TokenReviews
+  # and SubjectAccessReviews are cluster-scoped APIs
+  - patch: |-
+      $patch: delete
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: dragonfly-operator-manager-rolebinding

@@ -1,0 +1,14 @@
+# replaces upstream's ClusterRoleBinding (deleted in kustomization.yaml): the same
+# ClusterRole, bound in this namespace only, so the operator can't touch pods,
+# StatefulSets or Services of other apps
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dragonfly-operator-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dragonfly-operator-manager-role
+subjects:
+  - kind: ServiceAccount
+    name: dragonfly-operator-controller-manager # namespace set by kustomize
